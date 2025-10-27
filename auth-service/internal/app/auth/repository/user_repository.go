@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"augustberries/auth-service/internal/app/auth/entity"
@@ -10,11 +9,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-)
-
-var (
-	ErrUserNotFound      = errors.New("user not found")
-	ErrUserAlreadyExists = errors.New("user already exists")
 )
 
 type userRepository struct {
@@ -39,10 +33,6 @@ func (r *userRepository) Create(ctx context.Context, user *entity.User) error {
 	)
 
 	if err != nil {
-		// Проверяем на дублирование email (UNIQUE constraint)
-		if err.Error() == `ERROR: duplicate key value violates unique constraint "users_email_key" (SQLSTATE 23505)` {
-			return ErrUserAlreadyExists
-		}
 		return fmt.Errorf("failed to create user: %w", err)
 	}
 
@@ -64,9 +54,6 @@ func (r *userRepository) GetByID(ctx context.Context, id uuid.UUID) (*entity.Use
 	)
 
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrUserNotFound
-		}
 		return nil, fmt.Errorf("failed to get user by id: %w", err)
 	}
 
@@ -88,9 +75,6 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*entity.
 	)
 
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrUserNotFound
-		}
 		return nil, fmt.Errorf("failed to get user by email: %w", err)
 	}
 
@@ -115,7 +99,7 @@ func (r *userRepository) Update(ctx context.Context, user *entity.User) error {
 	}
 
 	if result.RowsAffected() == 0 {
-		return ErrUserNotFound
+		return pgx.ErrNoRows
 	}
 
 	return nil
@@ -131,8 +115,46 @@ func (r *userRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	}
 
 	if result.RowsAffected() == 0 {
-		return ErrUserNotFound
+		return pgx.ErrNoRows
 	}
 
 	return nil
+}
+
+// List получает список всех пользователей
+func (r *userRepository) List(ctx context.Context) ([]entity.User, error) {
+	query := `
+		SELECT id, email, password_hash, name, role_id, created_at 
+		FROM users 
+		ORDER BY created_at DESC
+	`
+
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list users: %w", err)
+	}
+	defer rows.Close()
+
+	var users []entity.User
+	for rows.Next() {
+		var user entity.User
+		err := rows.Scan(
+			&user.ID,
+			&user.Email,
+			&user.PasswordHash,
+			&user.Name,
+			&user.RoleID,
+			&user.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan user: %w", err)
+		}
+		users = append(users, user)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating users: %w", err)
+	}
+
+	return users, nil
 }

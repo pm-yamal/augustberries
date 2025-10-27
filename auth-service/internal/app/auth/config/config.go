@@ -11,6 +11,7 @@ import (
 type Config struct {
 	Server   ServerConfig
 	Database DatabaseConfig
+	Redis    RedisConfig
 	JWT      JWTConfig
 }
 
@@ -28,6 +29,14 @@ type DatabaseConfig struct {
 	Password string
 	DBName   string
 	SSLMode  string
+}
+
+// RedisConfig - настройки подключения к Redis
+type RedisConfig struct {
+	Host     string
+	Port     string
+	Password string
+	DB       int
 }
 
 // JWTConfig - настройки для JWT токенов
@@ -63,6 +72,12 @@ func Load() (*Config, error) {
 			DBName:   getEnv("DB_NAME", "auth_service"),
 			SSLMode:  getEnv("DB_SSLMODE", "disable"),
 		},
+		Redis: RedisConfig{
+			Host:     getEnv("REDIS_HOST", "localhost"),
+			Port:     getEnv("REDIS_PORT", "6379"),
+			Password: getEnv("REDIS_PASSWORD", ""),
+			DB:       getEnvInt("REDIS_DB", 0),
+		},
 		JWT: JWTConfig{
 			SecretKey:            getEnv("JWT_SECRET", "your-secret-key-change-in-production"),
 			AccessTokenDuration:  accessDuration,
@@ -77,6 +92,11 @@ func (c *DatabaseConfig) DSN() string {
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 		c.Host, c.Port, c.User, c.Password, c.DBName, c.SSLMode,
 	)
+}
+
+// Address возвращает адрес Redis в формате host:port
+func (c *RedisConfig) Address() string {
+	return c.Host + ":" + c.Port
 }
 
 // Address возвращает адрес сервера в формате host:port

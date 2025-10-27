@@ -2,19 +2,13 @@ package repository
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	"augustberries/auth-service/internal/app/auth/entity"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-)
-
-var (
-	ErrRefreshTokenNotFound = errors.New("refresh token not found")
 )
 
 type tokenRepository struct {
@@ -59,9 +53,6 @@ func (r *tokenRepository) GetRefreshToken(ctx context.Context, token string) (*e
 	)
 
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrRefreshTokenNotFound
-		}
 		return nil, fmt.Errorf("failed to get refresh token: %w", err)
 	}
 

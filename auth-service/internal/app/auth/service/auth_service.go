@@ -11,12 +11,7 @@ import (
 	"augustberries/auth-service/internal/app/auth/util"
 
 	"github.com/google/uuid"
-)
-
-var (
-	ErrInvalidCredentials  = errors.New("invalid email or password")
-	ErrUserExists          = errors.New("user with this email already exists")
-	ErrInvalidRefreshToken = errors.New("invalid or expired refresh token")
+	"github.com/jackc/pgx/v5"
 )
 
 // AuthService обрабатывает бизнес-логику аутентификации
@@ -46,7 +41,7 @@ func NewAuthService(
 func (s *AuthService) Register(ctx context.Context, req *entity.RegisterRequest) (*entity.AuthResponse, error) {
 	// Проверяем, существует ли пользователь с таким email
 	existingUser, err := s.userRepo.GetByEmail(ctx, req.Email)
-	if err != nil && !errors.Is(err, repository.ErrUserNotFound) {
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return nil, fmt.Errorf("failed to check existing user: %w", err)
 	}
 	if existingUser != nil {
@@ -62,6 +57,9 @@ func (s *AuthService) Register(ctx context.Context, req *entity.RegisterRequest)
 	// Получаем роль "user" по умолчанию
 	userRole, err := s.roleRepo.GetByName(ctx, "user")
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrRoleNotFound
+		}
 		return nil, fmt.Errorf("failed to get default role: %w", err)
 	}
 
@@ -88,7 +86,7 @@ func (s *AuthService) Login(ctx context.Context, req *entity.LoginRequest) (*ent
 	// Получаем пользователя по email
 	user, err := s.userRepo.GetByEmail(ctx, req.Email)
 	if err != nil {
-		if errors.Is(err, repository.ErrUserNotFound) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrInvalidCredentials
 		}
 		return nil, fmt.Errorf("failed to get user: %w", err)
@@ -108,7 +106,7 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 	// Проверяем refresh токен в БД
 	storedToken, err := s.tokenRepo.GetRefreshToken(ctx, refreshToken)
 	if err != nil {
-		if errors.Is(err, repository.ErrRefreshTokenNotFound) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrInvalidRefreshToken
 		}
 		return nil, fmt.Errorf("failed to get refresh token: %w", err)
@@ -122,12 +120,18 @@ func (s *AuthService) RefreshTokens(ctx context.Context, refreshToken string) (*
 	// Получаем пользователя
 	user, err := s.userRepo.GetByID(ctx, storedToken.UserID)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 
 	// Получаем роль и разрешения
 	role, err := s.roleRepo.GetByID(ctx, user.RoleID)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrRoleNotFound
+		}
 		return nil, fmt.Errorf("failed to get user role: %w", err)
 	}
 
@@ -145,12 +149,18 @@ func (s *AuthService) GetCurrentUser(ctx context.Context, userID uuid.UUID) (*en
 	// Получаем пользователя
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 
 	// Получаем роль
 	role, err := s.roleRepo.GetByID(ctx, user.RoleID)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrRoleNotFound
+		}
 		return nil, fmt.Errorf("failed to get user role: %w", err)
 	}
 
@@ -213,6 +223,9 @@ func (s *AuthService) generateAuthResponse(ctx context.Context, user *entity.Use
 	// Получаем роль
 	role, err := s.roleRepo.GetByID(ctx, user.RoleID)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrRoleNotFound
+		}
 		return nil, fmt.Errorf("failed to get user role: %w", err)
 	}
 
