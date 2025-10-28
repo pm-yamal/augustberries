@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 
 	"augustberries/auth-service/internal/app/auth/config"
 	"augustberries/auth-service/internal/app/auth/handler"
@@ -26,14 +27,28 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	// Подключаемся к базе данных
+	// Подключаемся к базе данных PostgreSQL
 	db, err := connectDB(context.Background(), cfg.Database)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer db.Close()
 
-	log.Println("Successfully connected to database")
+	log.Println("Successfully connected to PostgreSQL database")
+
+	// Подключаемся к Redis
+	redisClient := connectRedis(cfg.Redis)
+	defer redisClient.Close()
+
+	// Проверяем соединение с Redis
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := redisClient.Ping(ctx).Err(); err != nil {
+		log.Fatalf("Failed to connect to Redis: %v", err)
+	}
+
+	log.Println("Successfully connected to Redis")
 
 	// Инициализируем JWT менеджер
 	jwtManager := util.NewJWTManager(
@@ -45,7 +60,9 @@ func main() {
 	// Инициализируем репозитории
 	userRepo := repository.NewUserRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
-	tokenRepo := repository.NewTokenRepository(db)
+
+	// Используем Redis для хранения токенов вместо PostgreSQL
+	tokenRepo := repository.NewRedisTokenRepository(redisClient)
 
 	// Инициализируем сервисы
 	authService := service.NewAuthService(userRepo, roleRepo, tokenRepo, jwtManager)
@@ -66,9 +83,6 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Запускаем фоновую задачу очистки истекших токенов
-	go cleanupExpiredTokens(tokenRepo)
-
 	// Запускаем сервер в отдельной горутине
 	go func() {
 		log.Printf("Starting server on %s", cfg.Server.Address())
@@ -85,10 +99,10 @@ func main() {
 	log.Println("Shutting down server...")
 
 	// Даем серверу 30 секунд на завершение текущих запросов
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
 
-	if err := server.Shutdown(ctx); err != nil {
+	if err := server.Shutdown(shutdownCtx); err != nil {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
 
@@ -138,20 +152,18 @@ func connectDB(ctx context.Context, cfg config.DatabaseConfig) (*pgxpool.Pool, e
 	return pool, nil
 }
 
-// cleanupExpiredTokens периодически удаляет истекшие токены из БД
-func cleanupExpiredTokens(tokenRepo repository.TokenRepository) {
-	ticker := time.NewTicker(1 * time.Hour)
-	defer ticker.Stop()
+// connectRedis создает и настраивает Redis клиент
+func connectRedis(cfg config.RedisConfig) *redis.Client {
+	client := redis.NewClient(&redis.Options{
+		Addr:         cfg.Address(),
+		Password:     cfg.Password,
+		DB:           cfg.DB,
+		DialTimeout:  5 * time.Second,
+		ReadTimeout:  3 * time.Second,
+		WriteTimeout: 3 * time.Second,
+		PoolSize:     10,
+		MinIdleConns: 5,
+	})
 
-	for range ticker.C {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-
-		if err := tokenRepo.CleanupExpiredTokens(ctx); err != nil {
-			log.Printf("Failed to cleanup expired tokens: %v", err)
-		} else {
-			log.Println("Successfully cleaned up expired tokens")
-		}
-
-		cancel()
-	}
+	return client
 }
