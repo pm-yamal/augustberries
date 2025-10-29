@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  # PostgreSQL база данных для Auth Service
+  postgres-auth:
+    image: postgres:15-alpine
+    container_name: augustberries-postgres-auth
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: auth_service
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-auth-data:/var/lib/postgresql/data
+      - ./auth-service/migration/postgres:/docker-entrypoint-initdb.d
+    networks:
+      - backend_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis для кеширования и хранения токенов
+  redis:
+    image: redis:7-alpine
+    container_name: augustberries-redis
+    command: redis-server --requirepass redis_password
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - backend_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Auth Service
+  auth-service:
+    build:
+      context: .
+      dockerfile: ./auth-service/Dockerfile
+    container_name: augustberries-auth-service
+    environment:
+      # Server config
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8080
+
+      # Database config
+      DB_HOST: postgres-auth
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: auth_service
+      DB_SSLMODE: disable
+
+      # Redis config
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis_password
+      REDIS_DB: 0
+
+      # JWT config
+      JWT_SECRET: your-super-secret-jwt-key-change-in-production
+      JWT_ACCESS_DURATION: 15m
+      JWT_REFRESH_DURATION: 168h
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres-auth:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend_network
+    restart: unless-stopped
+
+networks:
+  backend_network:
+    driver: bridge
+
+volumes:
+  postgres-auth-data:
+  redis-data:

@@ -1,0 +1,43 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Go
+*.exe
+*.test
+*.prof
+*.out
+
+# Dependencies
+vendor/
+
+# Documentation
+README.md
+*.md
+
+# CI/CD
+.gitlab-ci.yml
+.github/
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Temporary files
+tmp/
+*.tmp
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.*
+!.env.example

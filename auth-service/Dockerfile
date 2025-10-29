@@ -1,0 +1,50 @@
+# Этап сборки
+FROM golang:1.21-alpine AS builder
+
+# Устанавливаем необходимые инструменты
+RUN apk add --no-cache git
+
+# Устанавливаем рабочую директорию
+WORKDIR /app
+
+# Копируем go.mod и go.sum для кеширования зависимостей
+COPY go.mod go.sum ./
+
+# Загружаем зависимости
+RUN go mod download
+
+# Копируем исходный код сервиса
+COPY auth-service/ ./auth-service/
+
+# Собираем приложение
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /auth-service ./auth-service/cmd/main.go
+
+# Этап запуска
+FROM alpine:latest
+
+# Устанавливаем CA сертификаты для HTTPS и timezone data
+RUN apk --no-cache add ca-certificates tzdata
+
+# Создаем непривилегированного пользователя
+RUN addgroup -g 1000 appuser && \
+adduser -D -u 1000 -G appuser appuser
+
+WORKDIR /app
+
+# Копируем скомпилированное приложение из builder
+COPY --from=builder /auth-service /app/auth-service
+
+# Копируем миграции
+COPY auth-service/migration/ /app/migration/
+
+# Меняем владельца файлов
+RUN chown -R appuser:appuser /app
+
+# Переключаемся на непривилегированного пользователя
+USER appuser
+
+# Открываем порт
+EXPOSE 8080
+
+# Запускаем приложение
+CMD ["/app/auth-service"]
