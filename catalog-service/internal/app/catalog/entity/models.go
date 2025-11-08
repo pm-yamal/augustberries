@@ -8,19 +8,30 @@ import (
 
 // Category представляет категорию товаров
 type Category struct {
-	ID        uuid.UUID `json:"id" db:"id"`
-	Name      string    `json:"name" db:"name"`
-	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	ID        uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
+	Name      string    `json:"name" gorm:"type:varchar(255);unique;not null"`
+	CreatedAt time.Time `json:"created_at" gorm:"autoCreateTime"`
+}
+
+// TableName указывает имя таблицы для GORM
+func (Category) TableName() string {
+	return "categories"
 }
 
 // Product представляет товар в каталоге
 type Product struct {
-	ID          uuid.UUID `json:"id" db:"id"`
-	Name        string    `json:"name" db:"name"`
-	Description string    `json:"description" db:"description"`
-	Price       float64   `json:"price" db:"price"` // Цена в базовой валюте (USD)
-	CategoryID  uuid.UUID `json:"category_id" db:"category_id"`
-	CreatedAt   time.Time `json:"created_at" db:"created_at"`
+	ID          uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
+	Name        string    `json:"name" gorm:"type:varchar(255);not null"`
+	Description string    `json:"description" gorm:"type:text"`
+	Price       float64   `json:"price" gorm:"type:decimal(10,2);not null"` // Цена в базовой валюте (USD)
+	CategoryID  uuid.UUID `json:"category_id" gorm:"type:uuid;not null"`
+	Category    *Category `json:"category,omitempty" gorm:"foreignKey:CategoryID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT"`
+	CreatedAt   time.Time `json:"created_at" gorm:"autoCreateTime"`
+}
+
+// TableName указывает имя таблицы для GORM
+func (Product) TableName() string {
+	return "products"
 }
 
 // ProductWithCategory содержит продукт с информацией о категории

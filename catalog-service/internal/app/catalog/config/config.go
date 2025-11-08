@@ -7,12 +7,13 @@ import (
 )
 
 // Config содержит все настройки приложения Catalog Service
-// Включает конфигурацию для HTTP сервера, PostgreSQL, Redis и Kafka
+// Включает конфигурацию для HTTP сервера, PostgreSQL, Redis, Kafka и JWT
 type Config struct {
 	Server   ServerConfig
 	Database DatabaseConfig
 	Redis    RedisConfig
 	Kafka    KafkaConfig
+	JWT      JWTConfig
 }
 
 // ServerConfig - настройки HTTP сервера
@@ -48,6 +49,12 @@ type KafkaConfig struct {
 	Topic   string   // Топик для событий PRODUCT_CREATED, PRODUCT_UPDATED, PRODUCT_DELETED
 }
 
+// JWTConfig - настройки для проверки JWT токенов
+// Используется для аутентификации запросов от других сервисов
+type JWTConfig struct {
+	Secret string // Секретный ключ для проверки JWT токенов (должен совпадать с Auth Service)
+}
+
 // Load загружает конфигурацию из переменных окружения
 // Возвращает ошибку, если не удалось распарсить значения
 func Load() (*Config, error) {
@@ -80,6 +87,10 @@ func Load() (*Config, error) {
 			// ИСПРАВЛЕНО: Топик должен быть product_events согласно заданию
 			Brokers: []string{getEnv("KAFKA_BROKERS", "localhost:9092")},
 			Topic:   getEnv("KAFKA_TOPIC", "product_events"),
+		},
+		JWT: JWTConfig{
+			// JWT Secret должен совпадать с Auth Service для валидации токенов
+			Secret: getEnv("JWT_SECRET", "your-secret-key-change-this-in-production"),
 		},
 	}, nil
 }

@@ -10,6 +10,7 @@ import (
 
 // KafkaProducer обертка над Kafka writer для отправки событий
 // Используется для отправки событий PRODUCT_UPDATED в топик product_events
+// Реализует интерфейс MessagePublisher для dependency injection
 type KafkaProducer struct {
 	writer *kafka.Writer // Writer для асинхронной отправки сообщений в Kafka
 }

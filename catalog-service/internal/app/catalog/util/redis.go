@@ -18,6 +18,7 @@ const (
 
 // RedisClient обертка над Redis клиентом для работы с кешем
 // Используется для кеширования категорий и снижения нагрузки на PostgreSQL
+// Реализует интерфейс RedisCache для dependency injection
 type RedisClient struct {
 	client *redis.Client
 }
@@ -43,7 +44,7 @@ func NewRedisClient(addr, password string, db int) (*RedisClient, error) {
 }
 
 // SetCategories сохраняет список категорий в кеш Redis
-// TTL определяет время жизни кеша (обычно 10-30 минут согласно заданию)
+// TTL определяет время жизни кеша (обычно 10-30 минут)
 // Использует JSON сериализацию для хранения
 func (r *RedisClient) SetCategories(ctx context.Context, categories []entity.Category, ttl time.Duration) error {
 	// Сериализуем массив категорий в JSON

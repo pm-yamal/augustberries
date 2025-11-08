@@ -3,56 +3,49 @@ package handler
 import (
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/cors"
+	"github.com/gin-gonic/gin"
 )
 
-// SetupRoutes настраивает все маршруты Catalog Service
-func SetupRoutes(catalogHandler *CatalogHandler) *chi.Mux {
-	router := chi.NewRouter()
+// SetupRoutes настраивает все маршруты Catalog Service с использованием Gin
+// Применяет Auth middleware для защиты эндпоинтов
+func SetupRoutes(catalogHandler *CatalogHandler, authMiddleware *AuthMiddleware) *gin.Engine {
+	router := gin.Default()
 
-	// Глобальные middleware
-	router.Use(middleware.RequestID)
-	router.Use(middleware.RealIP)
-	router.Use(middleware.Logger)
-	router.Use(middleware.Recoverer)
-	router.Use(middleware.Compress(5))
-
-	// CORS настройки
-	router.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"https://*", "http://*"},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
-		ExposedHeaders:   []string{"Link"},
-		AllowCredentials: true,
-		MaxAge:           300,
-	}))
-
-	// Health check endpoint
-	router.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok","service":"catalog-service"}`))
+	// Health check endpoint - публичный, без аутентификации
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status":  "ok",
+			"service": "catalog-service",
+		})
 	})
 
-	// Products endpoints
-	router.Route("/products", func(r chi.Router) {
-		r.Get("/", catalogHandler.GetAllProducts)       // Список всех товаров
-		r.Post("/", catalogHandler.CreateProduct)       // Создать товар
-		r.Get("/{id}", catalogHandler.GetProduct)       // Товар по ID
-		r.Put("/{id}", catalogHandler.UpdateProduct)    // Обновить товар (отправляет в Kafka при изменении цены)
-		r.Delete("/{id}", catalogHandler.DeleteProduct) // Удалить товар
-	})
+	// Products endpoints - все требуют аутентификации
+	products := router.Group("/products")
+	products.Use(authMiddleware.Authenticate()) // Все маршруты требуют JWT токен
+	{
+		// GET эндпоинты доступны всем аутентифицированным пользователям
+		products.GET("", catalogHandler.GetAllProducts) // Список всех товаров
+		products.GET("/:id", catalogHandler.GetProduct) // Товар по ID
 
-	// Categories endpoints
-	router.Route("/categories", func(r chi.Router) {
-		r.Get("/", catalogHandler.GetAllCategories)      // Список категорий (кеш Redis)
-		r.Post("/", catalogHandler.CreateCategory)       // Создать категорию
-		r.Get("/{id}", catalogHandler.GetCategory)       // Категория по ID
-		r.Put("/{id}", catalogHandler.UpdateCategory)    // Обновить категорию
-		r.Delete("/{id}", catalogHandler.DeleteCategory) // Удалить категорию
-	})
+		// POST, PUT, DELETE только для manager и admin
+		products.POST("", authMiddleware.RequireRole("manager", "admin"), catalogHandler.CreateProduct)       // Создать товар
+		products.PUT("/:id", authMiddleware.RequireRole("manager", "admin"), catalogHandler.UpdateProduct)    // Обновить товар (отправляет в Kafka при изменении цены)
+		products.DELETE("/:id", authMiddleware.RequireRole("admin"), catalogHandler.DeleteProduct)            // Удалить товар (только admin)
+	}
+
+	// Categories endpoints - все требуют аутентификации
+	categories := router.Group("/categories")
+	categories.Use(authMiddleware.Authenticate()) // Все маршруты требуют JWT токен
+	{
+		// GET эндпоинты доступны всем аутентифицированным пользователям
+		categories.GET("", catalogHandler.GetAllCategories) // Список категорий (кеш Redis)
+		categories.GET("/:id", catalogHandler.GetCategory)  // Категория по ID
+
+		// POST, PUT, DELETE только для manager и admin
+		categories.POST("", authMiddleware.RequireRole("manager", "admin"), catalogHandler.CreateCategory)    // Создать категорию
+		categories.PUT("/:id", authMiddleware.RequireRole("manager", "admin"), catalogHandler.UpdateCategory) // Обновить категорию
+		categories.DELETE("/:id", authMiddleware.RequireRole("admin"), catalogHandler.DeleteCategory)         // Удалить категорию (только admin)
+	}
 
 	return router
 }

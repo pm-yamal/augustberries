@@ -25,16 +25,16 @@ var (
 type CatalogService struct {
 	categoryRepo  repository.CategoryRepository // Репозиторий для работы с категориями в PostgreSQL
 	productRepo   repository.ProductRepository  // Репозиторий для работы с товарами в PostgreSQL
-	redisClient   *util.RedisClient             // Клиент для кеширования категорий
-	kafkaProducer *util.KafkaProducer           // Producer для отправки событий о товарах
+	redisClient   util.RedisCache               // Интерфейс для кеширования категорий
+	kafkaProducer util.MessagePublisher         // Интерфейс для отправки событий о товарах
 }
 
 // NewCatalogService создает новый сервис каталога с внедрением зависимостей
 func NewCatalogService(
 	categoryRepo repository.CategoryRepository,
 	productRepo repository.ProductRepository,
-	redisClient *util.RedisClient,
-	kafkaProducer *util.KafkaProducer,
+	redisClient util.RedisCache,
+	kafkaProducer util.MessagePublisher,
 ) *CatalogService {
 	return &CatalogService{
 		categoryRepo:  categoryRepo,
