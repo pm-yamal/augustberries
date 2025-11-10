@@ -14,10 +14,10 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 # Копируем исходный код сервиса
-COPY auth-service/ ./auth-service/
+COPY catalog-service/ ./catalog-service/
 
 # Собираем приложение
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /auth-service ./auth-service/cmd/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /catalog-service ./catalog-service/cmd/main.go
 
 # Этап запуска
 FROM alpine:latest
@@ -27,15 +27,15 @@ RUN apk --no-cache add ca-certificates tzdata
 
 # Создаем непривилегированного пользователя
 RUN addgroup -g 1000 appuser && \
-adduser -D -u 1000 -G appuser appuser
+    adduser -D -u 1000 -G appuser appuser
 
 WORKDIR /app
 
 # Копируем скомпилированное приложение из builder
-COPY --from=builder /auth-service /app/auth-service
+COPY --from=builder /catalog-service /app/catalog-service
 
 # Копируем миграции
-COPY auth-service/migration/ /app/migration/
+COPY catalog-service/migration/ /app/migration/
 
 # Меняем владельца файлов
 RUN chown -R appuser:appuser /app
@@ -47,4 +47,4 @@ USER appuser
 EXPOSE 8080
 
 # Запускаем приложение
-CMD ["/app/auth-service"]
+CMD ["/app/catalog-service"]
