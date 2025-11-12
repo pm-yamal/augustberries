@@ -1,6 +1,8 @@
 package main
 
 import (
+	http2 "augustberries/orders-service/internal/app/orders/infrastructure/http"
+	"augustberries/orders-service/internal/app/orders/infrastructure/messaging"
 	"context"
 	"fmt"
 	"log"
@@ -18,7 +20,6 @@ import (
 	"augustberries/orders-service/internal/app/orders/handler"
 	"augustberries/orders-service/internal/app/orders/repository"
 	"augustberries/orders-service/internal/app/orders/service"
-	"augustberries/orders-service/internal/app/orders/util"
 )
 
 func main() {
@@ -39,13 +40,13 @@ func main() {
 
 	// === ИНИЦИАЛИЗАЦИЯ KAFKA PRODUCER ===
 	// Kafka producer отправляет события ORDER_CREATED, ORDER_UPDATED в топик order_events
-	kafkaProducer := util.NewKafkaProducer(cfg.Kafka.Brokers, cfg.Kafka.Topic)
+	kafkaProducer := messaging.NewKafkaProducer(cfg.Kafka.Brokers, cfg.Kafka.Topic)
 	defer kafkaProducer.Close()
 	log.Println("Successfully initialized Kafka producer")
 
 	// === ИНИЦИАЛИЗАЦИЯ CATALOG CLIENT ===
 	// HTTP клиент для взаимодействия с Catalog Service
-	catalogClient := util.NewCatalogClient(cfg.CatalogService.URL)
+	catalogClient := http2.NewCatalogClient(cfg.CatalogService.URL)
 	log.Println("Initialized Catalog Service client")
 
 	// === ИНИЦИАЛИЗАЦИЯ СЛОЯ РЕПОЗИТОРИЕВ ===

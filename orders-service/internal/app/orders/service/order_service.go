@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"augustberries/orders-service/internal/app/orders/entity"
+	"augustberries/orders-service/internal/app/orders/infrastructure"
 	"augustberries/orders-service/internal/app/orders/repository"
-	"augustberries/orders-service/internal/app/orders/util"
 
 	"github.com/google/uuid"
 )
@@ -27,16 +27,16 @@ var (
 type OrderService struct {
 	orderRepo     repository.OrderRepository
 	orderItemRepo repository.OrderItemRepository
-	catalogClient *util.CatalogClient
-	kafkaProducer util.MessagePublisher
+	catalogClient infrastructure.CatalogServiceClient
+	kafkaProducer infrastructure.MessagePublisher
 }
 
 // NewOrderService создает новый сервис заказов с внедрением зависимостей
 func NewOrderService(
 	orderRepo repository.OrderRepository,
 	orderItemRepo repository.OrderItemRepository,
-	catalogClient *util.CatalogClient,
-	kafkaProducer util.MessagePublisher,
+	catalogClient infrastructure.CatalogServiceClient,
+	kafkaProducer infrastructure.MessagePublisher,
 ) *OrderService {
 	return &OrderService{
 		orderRepo:     orderRepo,
