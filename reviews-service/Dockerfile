@@ -14,7 +14,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 # Копируем исходный код сервиса
-COPY catalog-service/ ./catalog-service/
+COPY reviews-service/ ./reviews-service/
 
 # Собираем приложение
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /reviews-service ./reviews-service/cmd/main.go
@@ -32,10 +32,7 @@ RUN addgroup -g 1000 appuser && \
 WORKDIR /app
 
 # Копируем скомпилированное приложение из builder
-COPY --from=builder /catalog-service /app/catalog-service
-
-# Копируем миграции
-COPY catalog-service/migration/ /app/migration/
+COPY --from=builder /reviews-service /app/reviews-service
 
 # Меняем владельца файлов
 RUN chown -R appuser:appuser /app
@@ -44,7 +41,7 @@ RUN chown -R appuser:appuser /app
 USER appuser
 
 # Открываем порт
-EXPOSE 8080
+EXPOSE 8083
 
 # Запускаем приложение
-CMD ["/app/catalog-service"]
+CMD ["/app/reviews-service"]
