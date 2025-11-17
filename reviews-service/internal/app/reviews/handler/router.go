@@ -24,10 +24,10 @@ func SetupRoutes(reviewHandler *ReviewHandler, authMiddleware *AuthMiddleware) *
 	reviews.Use(authMiddleware.Authenticate()) // Все маршруты требуют JWT токен
 	{
 		// Базовые операции с отзывами
-		reviews.POST("/", reviewHandler.CreateReview)                 // Создать отзыв
-		reviews.GET("/:review_id", reviewHandler.GetReviewsByProduct) // Получить отзывы по товару (используется индекс)
-		reviews.PATCH("/:review_id", reviewHandler.UpdateReview)      // Обновить отзыв
-		reviews.DELETE("/:review_id", reviewHandler.DeleteReview)     // Удалить отзыв
+		reviews.POST("/", reviewHandler.CreateReview)                          // Создать отзыв
+		reviews.GET("/product/:product_id", reviewHandler.GetReviewsByProduct) // Получить все отзывы по товару (используется индекс)
+		reviews.PATCH("/:review_id", reviewHandler.UpdateReview)               // Обновить конкретный отзыв
+		reviews.DELETE("/:review_id", reviewHandler.DeleteReview)              // Удалить конкретный отзыв
 	}
 
 	return router

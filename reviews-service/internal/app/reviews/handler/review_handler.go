@@ -86,8 +86,8 @@ func (h *ReviewHandler) GetReviewsByProduct(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// UpdateReview обрабатывает PATCH /reviews/{product_id}
-// Обновляет отзыв с проверкой прав доступа
+// UpdateReview обрабатывает PATCH /reviews/{review_id}
+// Обновляет конкретный отзыв с проверкой прав доступа
 func (h *ReviewHandler) UpdateReview(c *gin.Context) {
 	// Получаем userID из контекста
 	userID, exists := c.Get("user_id")
@@ -102,7 +102,7 @@ func (h *ReviewHandler) UpdateReview(c *gin.Context) {
 		return
 	}
 
-	// В ТЗ указан product_id в URL, но логичнее использовать review_id
+	// Получаем review_id из параметров URL
 	reviewID := c.Param("review_id")
 	if reviewID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Review ID is required"})
@@ -133,8 +133,8 @@ func (h *ReviewHandler) UpdateReview(c *gin.Context) {
 	c.JSON(http.StatusOK, review)
 }
 
-// DeleteReview обрабатывает DELETE /reviews/{product_id}
-// Удаляет отзыв с проверкой прав доступа
+// DeleteReview обрабатывает DELETE /reviews/{review_id}
+// Удаляет конкретный отзыв с проверкой прав доступа
 func (h *ReviewHandler) DeleteReview(c *gin.Context) {
 	// Получаем userID из контекста
 	userID, exists := c.Get("user_id")
@@ -149,8 +149,8 @@ func (h *ReviewHandler) DeleteReview(c *gin.Context) {
 		return
 	}
 
-	// В ТЗ указан product_id в URL, но логичнее использовать review_id
-	reviewID := c.Param("product_id")
+	// Получаем review_id из параметров URL
+	reviewID := c.Param("review_id")
 	if reviewID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Review ID is required"})
 		return
