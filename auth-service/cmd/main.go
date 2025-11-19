@@ -113,7 +113,7 @@ func main() {
 func connectDB(ctx context.Context, cfg config.DatabaseConfig) (*pgxpool.Pool, error) {
 	// Формируем connection string для pgx
 	connString := fmt.Sprintf(
-		"postgres://%s:%s@%s:%s/%s?sslmode=%s",
+		"mongodb://%s:%s@%s:%s/%s?sslmode=%s",
 		cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.DBName, cfg.SSLMode,
 	)
 

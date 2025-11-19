@@ -66,6 +66,47 @@ services:
       timeout: 5s
       retries: 5
 
+  # MongoDB для Reviews Service
+  mongodb-reviews:
+    image: mongo:7-jammy
+    container_name: augustberries-mongodb-reviews
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mongo
+      MONGO_INITDB_ROOT_PASSWORD: mongo_password
+      MONGO_INITDB_DATABASE: reviews_service
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-reviews-data:/data/db
+      - mongodb-reviews-config:/data/configdb
+    networks:
+      - backend_network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Mongo Express - Web UI для MongoDB (опционально)
+  mongo-express:
+    image: mongo-express:latest
+    container_name: augustberries-mongo-express
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: mongo
+      ME_CONFIG_MONGODB_ADMINPASSWORD: mongo_password
+      ME_CONFIG_MONGODB_URL: mongodb://mongo:mongo_password@mongodb-reviews:27017/
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: admin
+    ports:
+      - "8888:8081"
+    depends_on:
+      mongodb-reviews:
+        condition: service_healthy
+    networks:
+      - backend_network
+    restart: unless-stopped
+
   # ==================== CACHE & QUEUE ====================
 
   # Redis для кеширования и хранения токенов
@@ -252,6 +293,38 @@ services:
       - backend_network
     restart: unless-stopped
 
+  # Reviews Service - управление отзывами
+  reviews-service:
+    build:
+      context: .
+      dockerfile: ./reviews-service/Dockerfile
+    container_name: augustberries-reviews-service
+    environment:
+      # Server config
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8083
+
+      # MongoDB config
+      MONGODB_URI: mongodb://mongo:mongo_password@mongodb-reviews:27017
+      MONGODB_DATABASE: reviews_service
+
+      # Kafka config
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_TOPIC: review_events
+
+      # JWT config (ОБЯЗАТЕЛЬНО совпадает с Auth Service!)
+      JWT_SECRET: your-super-secret-jwt-key-change-in-production
+    ports:
+      - "8083:8083"
+    depends_on:
+      mongodb-reviews:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - backend_network
+    restart: unless-stopped
+
 # ==================== NETWORKS ====================
 
 networks:
@@ -264,4 +337,6 @@ volumes:
   postgres-auth-data:
   postgres-catalog-data:
   postgres-orders-data:
+  mongodb-reviews-data:
+  mongodb-reviews-config:
   redis-data:

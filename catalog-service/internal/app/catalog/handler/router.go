@@ -15,7 +15,7 @@ func SetupRoutes(catalogHandler *CatalogHandler, authMiddleware *AuthMiddleware)
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":  "ok",
-			"service": "catalog-service",
+			"service": "reviews-service",
 		})
 	})
 
@@ -28,9 +28,9 @@ func SetupRoutes(catalogHandler *CatalogHandler, authMiddleware *AuthMiddleware)
 		products.GET("/:id", catalogHandler.GetProduct) // Товар по ID
 
 		// POST, PUT, DELETE только для manager и admin
-		products.POST("", authMiddleware.RequireRole("manager", "admin"), catalogHandler.CreateProduct)       // Создать товар
-		products.PUT("/:id", authMiddleware.RequireRole("manager", "admin"), catalogHandler.UpdateProduct)    // Обновить товар (отправляет в Kafka при изменении цены)
-		products.DELETE("/:id", authMiddleware.RequireRole("admin"), catalogHandler.DeleteProduct)            // Удалить товар (только admin)
+		products.POST("", authMiddleware.RequireRole("manager", "admin"), catalogHandler.CreateProduct)    // Создать товар
+		products.PUT("/:id", authMiddleware.RequireRole("manager", "admin"), catalogHandler.UpdateProduct) // Обновить товар (отправляет в Kafka при изменении цены)
+		products.DELETE("/:id", authMiddleware.RequireRole("admin"), catalogHandler.DeleteProduct)         // Удалить товар (только admin)
 	}
 
 	// Categories endpoints - все требуют аутентификации

@@ -17,7 +17,7 @@ import (
 var (
 	// Ошибки бизнес-логики для обработки в handlers
 	ErrOrderNotFound      = errors.New("order not found")
-	ErrProductNotFound    = errors.New("product not found in catalog")
+	ErrProductNotFound    = errors.New("product not found in reviews")
 	ErrInvalidOrderStatus = errors.New("invalid order status")
 	ErrUnauthorized       = errors.New("unauthorized access to order")
 )
@@ -64,7 +64,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, userID uuid.UUID, req *e
 	// Получаем информацию о товарах из Catalog Service
 	products, err := s.catalogClient.GetProducts(ctx, productIDs)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get products from catalog: %w", err)
+		return nil, fmt.Errorf("failed to get products from reviews: %w", err)
 	}
 
 	// Проверяем что все товары существуют

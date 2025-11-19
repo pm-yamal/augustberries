@@ -62,7 +62,7 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 	order, err := h.orderService.CreateOrder(c.Request.Context(), userUUID, &req, authTokenStr)
 	if err != nil {
 		if errors.Is(err, service.ErrProductNotFound) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "One or more products not found in catalog"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "One or more products not found in reviews"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create order"})
