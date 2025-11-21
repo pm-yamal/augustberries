@@ -325,6 +325,49 @@ services:
       - backend_network
     restart: unless-stopped
 
+  # Background Worker Service - обработка заказов и курсов валют
+  background-worker-service:
+    build:
+      context: .
+      dockerfile: ./background-worker-service/Dockerfile
+    container_name: augustberries-background-worker-service
+    environment:
+      # Database config (используем БД orders-service)
+      DB_HOST: postgres-orders
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: orders_service
+      DB_SSLMODE: disable
+
+      # Redis config (для хранения курсов валют)
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis_password
+      REDIS_DB: 2
+
+      # Kafka config (для обработки событий ORDER_CREATED)
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_TOPIC: order_events
+      KAFKA_GROUP_ID: background-worker-group
+
+      # Exchange Rate API config
+      EXCHANGE_RATE_API_URL: https://api.exchangerate-api.com/v4/latest/USD
+      EXCHANGE_RATE_API_TIMEOUT: 10
+
+      # Cron schedule для обновления курсов валют (каждые 30 минут)
+      CRON_SCHEDULE: "*/30 * * * *"
+    depends_on:
+      postgres-orders:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - backend_network
+    restart: unless-stopped
+
 # ==================== NETWORKS ====================
 
 networks:
