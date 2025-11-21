@@ -3,6 +3,7 @@ package repository
 import (
 	"augustberries/background-worker-service/internal/app/background-worker/entity"
 	"context"
+
 	"github.com/google/uuid"
 )
 
@@ -16,6 +17,9 @@ type OrderRepository interface {
 
 	// UpdateDeliveryAndTotal обновляет цену доставки и общую сумму заказа
 	UpdateDeliveryAndTotal(ctx context.Context, orderID uuid.UUID, deliveryPrice, totalPrice float64) error
+
+	// UpdateOrderWithCurrency обновляет цену доставки, общую сумму и валюту заказа
+	UpdateOrderWithCurrency(ctx context.Context, orderID uuid.UUID, deliveryPrice, totalPrice float64, currency string) error
 }
 
 // ExchangeRateRepository интерфейс для работы с курсами валют в Redis

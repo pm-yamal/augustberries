@@ -7,19 +7,32 @@ import (
 
 	"augustberries/background-worker-service/internal/app/background-worker/entity"
 	"augustberries/background-worker-service/internal/app/background-worker/repository"
+
 	"github.com/google/uuid"
 )
+
+// ExchangeRateServiceInterface определяет интерфейс для работы с курсами валют
+type ExchangeRateServiceInterface interface {
+	// GetRate получает курс валюты из Redis
+	GetRate(ctx context.Context, currency string) (*entity.ExchangeRate, error)
+	// GetRates получает курсы нескольких валют из Redis
+	GetRates(ctx context.Context, currencies []string) (map[string]*entity.ExchangeRate, error)
+	// ConvertCurrency конвертирует сумму из одной валюты в другую
+	ConvertCurrency(ctx context.Context, amount float64, fromCurrency, toCurrency string) (float64, float64, error)
+	// FetchAndStoreRates получает курсы валют из внешнего API и сохраняет в Redis
+	FetchAndStoreRates(ctx context.Context) error
+}
 
 // OrderProcessingService обрабатывает заказы и рассчитывает доставку
 type OrderProcessingService struct {
 	orderRepo   repository.OrderRepository
-	exchangeSvc *ExchangeRateService
+	exchangeSvc ExchangeRateServiceInterface
 }
 
 // NewOrderProcessingService создает новый сервис обработки заказов
 func NewOrderProcessingService(
 	orderRepo repository.OrderRepository,
-	exchangeSvc *ExchangeRateService,
+	exchangeSvc ExchangeRateServiceInterface,
 ) *OrderProcessingService {
 	return &OrderProcessingService{
 		orderRepo:   orderRepo,
@@ -28,10 +41,11 @@ func NewOrderProcessingService(
 }
 
 // ProcessOrderCreated обрабатывает событие ORDER_CREATED
-// 1. Получает заказ из БД
-// 2. Получает курс валюты из Redis
-// 3. Рассчитывает стоимость доставки в нужной валюте
-// 4. Обновляет заказ в PostgreSQL
+// ЛОГИКА:
+// 1. Получить цены товаров из заказа (они в USD согласно каталогу)
+// 2. Конвертировать в RUB
+// 3. Рассчитать доставку в RUB
+// 4. Сохранить заказ с currency = "RUB"
 func (s *OrderProcessingService) ProcessOrderCreated(ctx context.Context, event *entity.OrderEvent) error {
 	log.Printf("Processing ORDER_CREATED for order %s (currency: %s)", event.OrderID, event.Currency)
 
@@ -53,17 +67,18 @@ func (s *OrderProcessingService) ProcessOrderCreated(ctx context.Context, event 
 		return fmt.Errorf("failed to calculate delivery: %w", err)
 	}
 
-	// Обновляем заказ в БД
-	if err := s.orderRepo.UpdateDeliveryAndTotal(
+	// Обновляем заказ в БД: доставка, итоговая цена и валюта RUB
+	if err := s.orderRepo.UpdateOrderWithCurrency(
 		ctx,
 		order.ID,
 		calculation.ConvertedDelivery,
 		calculation.NewTotalPrice,
+		"RUB", // Сохраняем заказ с currency = "RUB"
 	); err != nil {
 		return fmt.Errorf("failed to update order: %w", err)
 	}
 
-	log.Printf("Successfully processed order %s: delivery %.2f %s -> %.2f %s (rate: %.4f), total: %.2f",
+	log.Printf("Successfully processed order %s: delivery %.2f %s -> %.2f %s (rate: %.4f), total: %.2f RUB",
 		order.ID,
 		calculation.OriginalDelivery,
 		calculation.OriginalCurrency,
@@ -77,47 +92,56 @@ func (s *OrderProcessingService) ProcessOrderCreated(ctx context.Context, event 
 }
 
 // calculateDeliveryWithExchange рассчитывает стоимость доставки с учетом курса валюты
+// ЛОГИКА:
+// 1. Получить цены товаров из заказа (они в USD согласно каталогу)
+// 2. Конвертировать товары и доставку из USD в RUB
+// 3. Сохранить заказ с currency = "RUB"
 func (s *OrderProcessingService) calculateDeliveryWithExchange(
 	ctx context.Context,
 	order *entity.Order,
 ) (*entity.DeliveryCalculation, error) {
-	// Определяем базовую валюту для расчетов (например, USD)
-	baseCurrency := "USD"
+	// Целевая валюта всегда RUB
+	targetCurrency := "RUB"
 
-	// Конвертируем стоимость доставки из валюты заказа в базовую валюту
+	// Исходная валюта заказа (по умолчанию USD согласно каталогу)
+	sourceCurrency := order.Currency
+	if sourceCurrency == "" {
+		sourceCurrency = "USD"
+	}
+
+	// Конвертируем стоимость доставки из USD в RUB
 	convertedDelivery, exchangeRate, err := s.exchangeSvc.ConvertCurrency(
 		ctx,
 		order.DeliveryPrice,
-		order.Currency,
-		baseCurrency,
+		sourceCurrency,
+		targetCurrency,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert delivery price: %w", err)
+		return nil, fmt.Errorf("failed to convert delivery price from %s to %s: %w", sourceCurrency, targetCurrency, err)
 	}
 
-	// Рассчитываем новую итоговую сумму
-	// Конвертируем текущую сумму без доставки
+	// Конвертируем цену товаров (без доставки) из USD в RUB
 	priceWithoutDelivery := order.TotalPrice - order.DeliveryPrice
 
 	convertedPrice, _, err := s.exchangeSvc.ConvertCurrency(
 		ctx,
 		priceWithoutDelivery,
-		order.Currency,
-		baseCurrency,
+		sourceCurrency,
+		targetCurrency,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert total price: %w", err)
+		return nil, fmt.Errorf("failed to convert total price from %s to %s: %w", sourceCurrency, targetCurrency, err)
 	}
 
-	// Новая итоговая сумма = конвертированная цена товаров + конвертированная доставка
+	// Новая итоговая сумма в RUB = конвертированная цена товаров + конвертированная доставка
 	newTotal := convertedPrice + convertedDelivery
 
 	return &entity.DeliveryCalculation{
 		OrderID:           order.ID,
 		OriginalDelivery:  order.DeliveryPrice,
-		OriginalCurrency:  order.Currency,
+		OriginalCurrency:  sourceCurrency,
 		ConvertedDelivery: convertedDelivery,
-		ConvertedCurrency: baseCurrency,
+		ConvertedCurrency: targetCurrency, // Всегда RUB
 		ExchangeRate:      exchangeRate,
 		NewTotalPrice:     newTotal,
 		CalculatedAt:      order.CreatedAt,

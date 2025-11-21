@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"augustberries/background-worker-service/internal/app/background-worker/entity"
+
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -67,6 +68,30 @@ func (r *orderRepository) UpdateDeliveryAndTotal(ctx context.Context, orderID uu
 
 	if result.Error != nil {
 		return fmt.Errorf("failed to update delivery and total price: %w", result.Error)
+	}
+
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("order %s not found", orderID)
+	}
+
+	return nil
+}
+
+// UpdateOrderWithCurrency обновляет цену доставки, общую сумму и валюту заказа
+// Используется после расчета стоимости доставки с конвертацией в RUB
+func (r *orderRepository) UpdateOrderWithCurrency(ctx context.Context, orderID uuid.UUID, deliveryPrice, totalPrice float64, currency string) error {
+	// Выполняем точечное обновление трех полей
+	result := r.db.WithContext(ctx).
+		Model(&entity.Order{}).
+		Where("id = ?", orderID).
+		Updates(map[string]interface{}{
+			"delivery_price": deliveryPrice,
+			"total_price":    totalPrice,
+			"currency":       currency,
+		})
+
+	if result.Error != nil {
+		return fmt.Errorf("failed to update delivery, total price and currency: %w", result.Error)
 	}
 
 	if result.RowsAffected == 0 {

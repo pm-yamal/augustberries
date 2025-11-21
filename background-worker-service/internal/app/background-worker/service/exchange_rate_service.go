@@ -45,7 +45,12 @@ func (s *ExchangeRateService) FetchAndStoreRates(ctx context.Context) error {
 	// Получаем курсы из внешнего API
 	rates, err := s.fetchRatesFromAPI(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to fetch rates from API: %w", err)
+		log.Printf("WARNING: Failed to fetch rates from API: %v", err)
+		log.Println("Worker will continue using cached rates if available")
+
+		// Не возвращаем ошибку, чтобы worker продолжал работать с кэшированными курсами
+		// Это fallback механизм
+		return nil
 	}
 
 	// Преобразуем в entity.ExchangeRate
@@ -112,6 +117,13 @@ func (s *ExchangeRateService) GetRate(ctx context.Context, currency string) (*en
 	rate, err := s.rateRepo.Get(ctx, currency)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get rate for %s: %w", currency, err)
+	}
+
+	// Проверяем возраст курса и выводим предупреждение если курс старый
+	// (более 2 часов согласно TTL 30 минут + запас)
+	age := time.Since(rate.UpdatedAt)
+	if age > 2*time.Hour {
+		log.Printf("WARNING: Using outdated exchange rate for %s (age: %v). API may be unavailable.", currency, age)
 	}
 
 	return rate, nil
