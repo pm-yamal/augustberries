@@ -5,17 +5,18 @@ import (
 	"log"
 
 	"augustberries/background-worker-service/internal/app/background-worker/service"
+
 	"github.com/robfig/cron/v3"
 )
 
 // CronScheduler управляет периодическими задачами
 type CronScheduler struct {
 	cron        *cron.Cron
-	exchangeSvc *service.ExchangeRateService
+	exchangeSvc service.ExchangeRateServiceInterface
 }
 
 // NewCronScheduler создает новый планировщик задач
-func NewCronScheduler(exchangeSvc *service.ExchangeRateService) *CronScheduler {
+func NewCronScheduler(exchangeSvc service.ExchangeRateServiceInterface) *CronScheduler {
 	// Создаем cron с логированием
 	c := cron.New(cron.WithLogger(cron.VerbosePrintfLogger(log.Default())))
 

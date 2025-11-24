@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"augustberries/background-worker-service/internal/app/background-worker/config"
+	"augustberries/background-worker-service/internal/app/background-worker/handler"
 	"augustberries/background-worker-service/internal/app/background-worker/processor"
 	"augustberries/background-worker-service/internal/app/background-worker/repository"
 	"augustberries/background-worker-service/internal/app/background-worker/service"
@@ -54,11 +56,19 @@ func main() {
 	exchangeRateRepo := repository.NewExchangeRateRepository(redisClient, cfg.Redis.TTL)
 	log.Println("Repositories initialized")
 
-	// === ИНИЦИАЛИЗАЦИЯ СЕРВИСОВ ===
-	exchangeRateSvc := service.NewExchangeRateService(
-		exchangeRateRepo,
+	// === ИНИЦИАЛИЗАЦИЯ API КЛИЕНТА ===
+	// API клиент для получения курсов валют из внешнего API
+	exchangeAPIClient := service.NewExchangeRateAPIClient(
 		cfg.ExchangeAPI.URL,
 		cfg.ExchangeAPI.Timeout,
+	)
+	log.Println("Exchange Rate API Client initialized")
+
+	// === ИНИЦИАЛИЗАЦИЯ СЕРВИСОВ ===
+	// Exchange Rate Service использует API клиент для получения данных
+	exchangeRateSvc := service.NewExchangeRateService(
+		exchangeRateRepo,
+		exchangeAPIClient,
 	)
 
 	orderProcessingSvc := service.NewOrderProcessingService(
@@ -92,6 +102,34 @@ func main() {
 	}
 	defer cronScheduler.Stop()
 	log.Printf("Cron scheduler started (schedule: %s)", cfg.CronSchedule.UpdateRates)
+
+	// === ИНИЦИАЛИЗАЦИЯ HEALTHCHECK HTTP СЕРВЕРА ===
+	healthHandler := handler.NewHealthCheckHandler(db, redisClient, exchangeRateSvc)
+
+	mux := http.NewServeMux()
+	healthHandler.RegisterRoutes(mux)
+
+	httpServer := &http.Server{
+		Addr:    ":8080",
+		Handler: mux,
+	}
+
+	// Запускаем HTTP сервер в отдельной горутине
+	go func() {
+		log.Println("Starting healthcheck HTTP server on :8080...")
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("HTTP server error: %v", err)
+		}
+	}()
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		httpServer.Shutdown(shutdownCtx)
+	}()
+	log.Println("Healthcheck endpoints available:")
+	log.Println("  - GET http://localhost:8080/health")
+	log.Println("  - GET http://localhost:8080/health/readiness")
+	log.Println("  - GET http://localhost:8080/health/liveness")
 
 	// === ЗАПУСК ЗАВЕРШЕН ===
 	log.Println("Background Worker Service is running")

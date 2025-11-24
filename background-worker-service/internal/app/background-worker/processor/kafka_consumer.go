@@ -9,14 +9,15 @@ import (
 
 	"augustberries/background-worker-service/internal/app/background-worker/entity"
 	"augustberries/background-worker-service/internal/app/background-worker/service"
+
 	"github.com/segmentio/kafka-go"
 )
 
 // KafkaConsumer обрабатывает события из Kafka топика order_events
 type KafkaConsumer struct {
 	reader      *kafka.Reader
-	orderSvc    *service.OrderProcessingService
-	exchangeSvc *service.ExchangeRateService
+	orderSvc    service.OrderProcessingServiceInterface
+	exchangeSvc service.ExchangeRateServiceInterface
 	stopChan    chan struct{}
 	doneChan    chan struct{}
 }
@@ -28,8 +29,8 @@ func NewKafkaConsumer(
 	groupID string,
 	minBytes int,
 	maxBytes int,
-	orderSvc *service.OrderProcessingService,
-	exchangeSvc *service.ExchangeRateService,
+	orderSvc service.OrderProcessingServiceInterface,
+	exchangeSvc service.ExchangeRateServiceInterface,
 ) *KafkaConsumer {
 	// Настраиваем Kafka reader
 	reader := kafka.NewReader(kafka.ReaderConfig{

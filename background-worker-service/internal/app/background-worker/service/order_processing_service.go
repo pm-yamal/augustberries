@@ -11,18 +11,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// ExchangeRateServiceInterface определяет интерфейс для работы с курсами валют
-type ExchangeRateServiceInterface interface {
-	// GetRate получает курс валюты из Redis
-	GetRate(ctx context.Context, currency string) (*entity.ExchangeRate, error)
-	// GetRates получает курсы нескольких валют из Redis
-	GetRates(ctx context.Context, currencies []string) (map[string]*entity.ExchangeRate, error)
-	// ConvertCurrency конвертирует сумму из одной валюты в другую
-	ConvertCurrency(ctx context.Context, amount float64, fromCurrency, toCurrency string) (float64, float64, error)
-	// FetchAndStoreRates получает курсы валют из внешнего API и сохраняет в Redis
-	FetchAndStoreRates(ctx context.Context) error
-}
-
 // OrderProcessingService обрабатывает заказы и рассчитывает доставку
 type OrderProcessingService struct {
 	orderRepo   repository.OrderRepository
@@ -53,6 +41,11 @@ func (s *OrderProcessingService) ProcessOrderCreated(ctx context.Context, event 
 	order, err := s.orderRepo.GetByID(ctx, event.OrderID)
 	if err != nil {
 		return fmt.Errorf("failed to get order: %w", err)
+	}
+
+	// Валидируем заказ перед обработкой
+	if err := s.ValidateOrder(order); err != nil {
+		return fmt.Errorf("order validation failed: %w", err)
 	}
 
 	// Проверяем что у заказа есть стоимость доставки для обработки

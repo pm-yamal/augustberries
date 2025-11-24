@@ -2,48 +2,39 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"time"
 
 	"augustberries/background-worker-service/internal/app/background-worker/entity"
 	"augustberries/background-worker-service/internal/app/background-worker/repository"
 )
 
-// ExchangeRateService управляет получением и хранением курсов валют
+// ExchangeRateService управляет бизнес-логикой работы с курсами валют
+// Использует API клиент для получения данных и Repository для хранения
 type ExchangeRateService struct {
-	rateRepo   repository.ExchangeRateRepository
-	apiURL     string
-	apiTimeout time.Duration
-	httpClient *http.Client
+	rateRepo  repository.ExchangeRateRepository
+	apiClient ExchangeRateAPIClient
 }
 
 // NewExchangeRateService создает новый сервис курсов валют
 func NewExchangeRateService(
 	rateRepo repository.ExchangeRateRepository,
-	apiURL string,
-	apiTimeoutSec int,
+	apiClient ExchangeRateAPIClient,
 ) *ExchangeRateService {
 	return &ExchangeRateService{
-		rateRepo:   rateRepo,
-		apiURL:     apiURL,
-		apiTimeout: time.Duration(apiTimeoutSec) * time.Second,
-		httpClient: &http.Client{
-			Timeout: time.Duration(apiTimeoutSec) * time.Second,
-		},
+		rateRepo:  rateRepo,
+		apiClient: apiClient,
 	}
 }
 
-// FetchAndStoreRates получает курсы валют из внешнего API и сохраняет в Redis
+// FetchAndStoreRates получает курсы валют через API клиент и сохраняет в Redis
 // Вызывается по cron расписанию
 func (s *ExchangeRateService) FetchAndStoreRates(ctx context.Context) error {
 	log.Println("Starting to fetch exchange rates from API...")
 
-	// Получаем курсы из внешнего API
-	rates, err := s.fetchRatesFromAPI(ctx)
+	// Получаем курсы через API клиент
+	rates, err := s.apiClient.FetchRates(ctx)
 	if err != nil {
 		log.Printf("WARNING: Failed to fetch rates from API: %v", err)
 		log.Println("Worker will continue using cached rates if available")
@@ -72,43 +63,6 @@ func (s *ExchangeRateService) FetchAndStoreRates(ctx context.Context) error {
 
 	log.Printf("Successfully fetched and stored %d exchange rates", len(exchangeRates))
 	return nil
-}
-
-// fetchRatesFromAPI получает курсы валют из внешнего API
-func (s *ExchangeRateService) fetchRatesFromAPI(ctx context.Context) (map[string]float64, error) {
-	// Создаем HTTP запрос с контекстом
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.apiURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	// Выполняем запрос
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Проверяем статус код
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
-	}
-
-	// Читаем тело ответа
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	// Парсим JSON ответ
-	var apiResponse entity.ExchangeRatesResponse
-	if err := json.Unmarshal(body, &apiResponse); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal API response: %w", err)
-	}
-
-	// Возвращаем только курсы валют
-	return apiResponse.Rates, nil
 }
 
 // GetRate получает курс валюты из Redis

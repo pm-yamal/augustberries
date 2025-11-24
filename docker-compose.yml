@@ -325,14 +325,20 @@ services:
       - backend_network
     restart: unless-stopped
 
-  # Background Worker Service - обработка заказов и курсов валют
+  # ===================================================================
+  # Background Worker Service
+  # Обрабатывает ORDER_CREATED из Kafka, конвертирует валюты,
+  # обновляет заказы в БД orders_service с учетом курсов из Redis
+  # ===================================================================
   background-worker-service:
     build:
       context: .
       dockerfile: ./background-worker-service/Dockerfile
     container_name: augustberries-background-worker-service
+    hostname: background-worker
+
     environment:
-      # Database config (используем БД orders-service)
+      # Database config (используем БД orders-service для обновления заказов)
       DB_HOST: postgres-orders
       DB_PORT: 5432
       DB_USER: postgres
@@ -340,23 +346,34 @@ services:
       DB_NAME: orders_service
       DB_SSLMODE: disable
 
-      # Redis config (для хранения курсов валют)
+      # Redis config (для хранения курсов валют: rates:USD, rates:EUR, rates:RUB)
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: redis_password
       REDIS_DB: 2
+      REDIS_TTL: 30m
 
       # Kafka config (для обработки событий ORDER_CREATED)
       KAFKA_BROKERS: kafka:29092
       KAFKA_TOPIC: order_events
       KAFKA_GROUP_ID: background-worker-group
+      KAFKA_MIN_BYTES: 1
+      KAFKA_MAX_BYTES: 10485760
 
-      # Exchange Rate API config
+      # Exchange Rate API config (для получения курсов валют)
       EXCHANGE_RATE_API_URL: https://api.exchangerate-api.com/v4/latest/USD
       EXCHANGE_RATE_API_TIMEOUT: 10
 
       # Cron schedule для обновления курсов валют (каждые 30 минут)
       CRON_SCHEDULE: "*/30 * * * *"
+
+      # General settings
+      TZ: UTC
+      LOG_LEVEL: info
+
+    ports:
+      - "8085:8080"  # Healthcheck HTTP endpoint
+
     depends_on:
       postgres-orders:
         condition: service_healthy
@@ -364,9 +381,30 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      orders-service:
+        condition: service_started
+
     networks:
       - backend_network
+
     restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/liveness"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    labels:
+      - "com.augustberries.service=background-worker"
+      - "com.augustberries.description=Обработка заказов и конвертация валют"
 
 # ==================== NETWORKS ====================
 
