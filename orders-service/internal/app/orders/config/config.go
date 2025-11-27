@@ -63,8 +63,8 @@ func Load() (*Config, error) {
 		Database: DatabaseConfig{
 			Host:     getEnv("DB_HOST", "localhost"),
 			Port:     getEnv("DB_PORT", "5432"),
-			User:     getEnv("DB_USER", "mongodb"),
-			Password: getEnv("DB_PASSWORD", "mongodb"),
+			User:     getEnv("DB_USER", "postgres"),
+			Password: getEnv("DB_PASSWORD", "postgres"),
 			DBName:   getEnv("DB_NAME", "orders_service"),
 			SSLMode:  getEnv("DB_SSLMODE", "disable"),
 		},

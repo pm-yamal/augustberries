@@ -64,7 +64,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, userID uuid.UUID, req *e
 	// Получаем информацию о товарах из Catalog Service
 	products, err := s.catalogClient.GetProducts(ctx, productIDs)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get products from reviews: %w", err)
+		return nil, fmt.Errorf("failed to get products from catalog: %w", err)
 	}
 
 	// Проверяем что все товары существуют
@@ -108,19 +108,8 @@ func (s *OrderService) CreateOrder(ctx context.Context, userID uuid.UUID, req *e
 	}
 
 	// Добавляем стоимость доставки
+	// При этом конвертация валют выполняется в Background Worker Service после получения актуальных курсов из API
 	totalPrice += req.DeliveryPrice
-
-	// Согласно ТЗ, цены товаров в валюте, а итоговая сумма в рублях
-	// Здесь должна быть конвертация валют, но для простоты используем коэффициенты
-	if req.Currency == "USD" {
-		totalPrice = totalPrice * 95 // 1 USD = 95 RUB (примерный курс)
-		order.Currency = "RUB"
-	} else if req.Currency == "EUR" {
-		totalPrice = totalPrice * 105 // 1 EUR = 105 RUB (примерный курс)
-		order.Currency = "RUB"
-	}
-	// Если валюта уже RUB, оставляем как есть
-
 	order.TotalPrice = totalPrice
 
 	// Сохраняем заказ в БД

@@ -15,7 +15,7 @@ func SetupRoutes(catalogHandler *CatalogHandler, authMiddleware *AuthMiddleware)
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":  "ok",
-			"service": "reviews-service",
+			"service": "catalog-service",
 		})
 	})
 

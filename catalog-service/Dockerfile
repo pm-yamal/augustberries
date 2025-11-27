@@ -17,7 +17,7 @@ RUN go mod download
 COPY catalog-service/ ./catalog-service/
 
 # Собираем приложение
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /reviews-service ./reviews-service/cmd/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /catalog-service ./catalog-service/cmd/main.go
 
 # Этап запуска
 FROM alpine:latest
