@@ -1,0 +1,53 @@
+[
+  {
+    "httpRequest": {
+      "method": "GET",
+      "path": "/health"
+    },
+    "httpResponse": {
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": ["application/json"]
+      },
+      "body": "{\"status\": \"healthy\"}"
+    }
+  },
+  {
+    "httpRequest": {
+      "method": "GET",
+      "path": "/products/.*"
+    },
+    "httpResponse": {
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": ["application/json"]
+      },
+      "body": {
+        "id": "{{request.pathParameters.id}}",
+        "name": "Test Product",
+        "description": "Test product for orders",
+        "price": 99.99,
+        "category_id": "11111111-1111-1111-1111-111111111111",
+        "category": {
+          "id": "11111111-1111-1111-1111-111111111111",
+          "name": "Test Category"
+        }
+      }
+    }
+  },
+  {
+    "httpRequest": {
+      "method": "POST",
+      "path": "/products/batch"
+    },
+    "httpResponse": {
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": ["application/json"]
+      },
+      "body": {
+        "products": []
+      }
+    }
+  }
+]
