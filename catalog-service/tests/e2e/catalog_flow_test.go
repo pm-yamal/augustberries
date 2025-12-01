@@ -343,8 +343,23 @@ func TestCategoryCaching(t *testing.T) {
 
 	resp, err := client.Post(BaseURL+"/categories", "application/json", bytes.NewBuffer(body))
 	require.NoError(t, err)
+
+	var createdCategory entity.Category
+	err = json.NewDecoder(resp.Body).Decode(&createdCategory)
 	resp.Body.Close()
+	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	categoryID := createdCategory.ID
+
+	// Cleanup: удаляем категорию после теста
+	defer func() {
+		req, _ := http.NewRequest(http.MethodDelete, BaseURL+"/categories/"+categoryID.String(), nil)
+		resp, err := client.Do(req)
+		if err == nil {
+			resp.Body.Close()
+		}
+	}()
 
 	// Первый запрос - заполняет кеш
 	resp, err = client.Get(BaseURL + "/categories")
