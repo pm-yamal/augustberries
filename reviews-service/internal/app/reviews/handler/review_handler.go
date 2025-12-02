@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -11,14 +12,25 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
+// ReviewServiceInterface определяет методы сервиса для dependency injection
+// Позволяет подменять реальный сервис моком в тестах
+type ReviewServiceInterface interface {
+	CreateReview(ctx context.Context, userID string, req *entity.CreateReviewRequest) (*entity.Review, error)
+	GetReviewsByProduct(ctx context.Context, productID string) ([]entity.Review, error)
+	GetReview(ctx context.Context, reviewID string) (*entity.Review, error)
+	UpdateReview(ctx context.Context, reviewID string, userID string, req *entity.UpdateReviewRequest) (*entity.Review, error)
+	DeleteReview(ctx context.Context, reviewID string, userID string) error
+	GetUserReviews(ctx context.Context, userID string) ([]entity.Review, error)
+}
+
 // ReviewHandler обрабатывает HTTP запросы для отзывов с использованием Gin
 type ReviewHandler struct {
-	reviewService *service.ReviewService
+	reviewService ReviewServiceInterface
 	validator     *validator.Validate
 }
 
 // NewReviewHandler создает новый обработчик отзывов
-func NewReviewHandler(reviewService *service.ReviewService) *ReviewHandler {
+func NewReviewHandler(reviewService ReviewServiceInterface) *ReviewHandler {
 	return &ReviewHandler{
 		reviewService: reviewService,
 		validator:     validator.New(),
