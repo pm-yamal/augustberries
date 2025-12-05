@@ -1,17 +1,18 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
 
+	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
+
 	"augustberries/auth-service/internal/app/auth/entity"
 	"augustberries/auth-service/internal/app/auth/service"
 	"augustberries/auth-service/internal/app/auth/util"
-
-	"github.com/go-playground/validator/v10"
-	"github.com/google/uuid"
+	"augustberries/pkg/metrics"
 )
 
 // AuthHandler обрабатывает HTTP запросы для аутентификации
@@ -29,187 +30,270 @@ func NewAuthHandler(authService *service.AuthService) *AuthHandler {
 }
 
 // Register обрабатывает POST /auth/register
-func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) Register(c *gin.Context) {
 	var req entity.RegisterRequest
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, "Invalid request body")
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Bad Request",
+			"message": "Invalid request body",
+		})
 		return
 	}
 
 	// Валидация с помощью validator
 	if err := h.validator.Struct(req); err != nil {
 		validationErrors := err.(validator.ValidationErrors)
-		respondError(w, http.StatusBadRequest, formatValidationErrors(validationErrors))
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Bad Request",
+			"message": formatValidationErrors(validationErrors),
+		})
 		return
 	}
 
-	resp, err := h.authService.Register(r.Context(), &req)
+	resp, err := h.authService.Register(c.Request.Context(), &req)
 	if err != nil {
 		if errors.Is(err, service.ErrUserExists) {
-			respondError(w, http.StatusConflict, "User with this email already exists")
+			c.JSON(http.StatusConflict, gin.H{
+				"error":   "Conflict",
+				"message": "User with this email already exists",
+			})
 			return
 		}
-		respondError(w, http.StatusInternalServerError, "Failed to register user")
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Internal Server Error",
+			"message": "Failed to register user",
+		})
 		return
 	}
 
-	respondJSON(w, http.StatusCreated, resp)
+	// Записываем метрику успешной регистрации
+	metrics.AuthRegistrations.Inc()
+
+	c.JSON(http.StatusCreated, resp)
 }
 
 // Login обрабатывает POST /auth/login
-func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) Login(c *gin.Context) {
 	var req entity.LoginRequest
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, "Invalid request body")
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Bad Request",
+			"message": "Invalid request body",
+		})
 		return
 	}
 
 	// Валидация
 	if err := h.validator.Struct(req); err != nil {
 		validationErrors := err.(validator.ValidationErrors)
-		respondError(w, http.StatusBadRequest, formatValidationErrors(validationErrors))
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Bad Request",
+			"message": formatValidationErrors(validationErrors),
+		})
 		return
 	}
 
-	resp, err := h.authService.Login(r.Context(), &req)
+	resp, err := h.authService.Login(c.Request.Context(), &req)
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidCredentials) {
-			respondError(w, http.StatusUnauthorized, "Invalid email or password")
+			// Записываем неудачную попытку входа
+			metrics.AuthLogins.WithLabelValues("failed").Inc()
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error":   "Unauthorized",
+				"message": "Invalid email or password",
+			})
 			return
 		}
-		respondError(w, http.StatusInternalServerError, "Failed to login")
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Internal Server Error",
+			"message": "Failed to login",
+		})
 		return
 	}
 
-	respondJSON(w, http.StatusOK, resp)
+	// Записываем успешный вход
+	metrics.AuthLogins.WithLabelValues("success").Inc()
+	// Также записываем выдачу токенов
+	metrics.AuthTokensIssued.WithLabelValues("access").Inc()
+	metrics.AuthTokensIssued.WithLabelValues("refresh").Inc()
+
+	c.JSON(http.StatusOK, resp)
 }
 
 // RefreshToken обрабатывает POST /auth/refresh
-func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	var req entity.RefreshRequest
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, "Invalid request body")
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Bad Request",
+			"message": "Invalid request body",
+		})
 		return
 	}
 
 	// Валидация
 	if err := h.validator.Struct(req); err != nil {
 		validationErrors := err.(validator.ValidationErrors)
-		respondError(w, http.StatusBadRequest, formatValidationErrors(validationErrors))
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Bad Request",
+			"message": formatValidationErrors(validationErrors),
+		})
 		return
 	}
 
-	tokens, err := h.authService.RefreshTokens(r.Context(), req.RefreshToken)
+	tokens, err := h.authService.RefreshTokens(c.Request.Context(), req.RefreshToken)
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidRefreshToken) {
-			respondError(w, http.StatusUnauthorized, "Invalid or expired refresh token")
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error":   "Unauthorized",
+				"message": "Invalid or expired refresh token",
+			})
 			return
 		}
-		respondError(w, http.StatusInternalServerError, "Failed to refresh token")
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Internal Server Error",
+			"message": "Failed to refresh token",
+		})
 		return
 	}
 
-	respondJSON(w, http.StatusOK, tokens)
+	c.JSON(http.StatusOK, tokens)
 }
 
 // GetMe обрабатывает GET /auth/me
-func (h *AuthHandler) GetMe(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) GetMe(c *gin.Context) {
 	// Получаем userID из контекста (устанавливается middleware)
-	userID, ok := r.Context().Value("user_id").(uuid.UUID)
+	userIDValue, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error":   "Unauthorized",
+			"message": "Unauthorized",
+		})
+		return
+	}
+
+	userID, ok := userIDValue.(uuid.UUID)
 	if !ok {
-		respondError(w, http.StatusUnauthorized, "Unauthorized")
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error":   "Unauthorized",
+			"message": "Unauthorized",
+		})
 		return
 	}
 
-	user, err := h.authService.GetCurrentUser(r.Context(), userID)
+	user, err := h.authService.GetCurrentUser(c.Request.Context(), userID)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to get user info")
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Internal Server Error",
+			"message": "Failed to get user info",
+		})
 		return
 	}
 
-	respondJSON(w, http.StatusOK, user)
+	c.JSON(http.StatusOK, user)
 }
 
 // Logout обрабатывает POST /auth/logout
-func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) Logout(c *gin.Context) {
 	// Получаем userID из контекста
-	userID, ok := r.Context().Value("user_id").(uuid.UUID)
+	userIDValue, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error":   "Unauthorized",
+			"message": "Unauthorized",
+		})
+		return
+	}
+
+	userID, ok := userIDValue.(uuid.UUID)
 	if !ok {
-		respondError(w, http.StatusUnauthorized, "Unauthorized")
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error":   "Unauthorized",
+			"message": "Unauthorized",
+		})
 		return
 	}
 
 	// Извлекаем access токен из заголовка
-	authHeader := r.Header.Get("Authorization")
+	authHeader := c.GetHeader("Authorization")
 	if authHeader == "" {
-		respondError(w, http.StatusBadRequest, "Authorization header required")
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Bad Request",
+			"message": "Authorization header required",
+		})
 		return
 	}
 
 	token := strings.TrimPrefix(authHeader, "Bearer ")
 	if token == authHeader {
-		respondError(w, http.StatusBadRequest, "Invalid authorization header format")
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Bad Request",
+			"message": "Invalid authorization header format",
+		})
 		return
 	}
 
-	if err := h.authService.Logout(r.Context(), userID, token); err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to logout")
+	if err := h.authService.Logout(c.Request.Context(), userID, token); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Internal Server Error",
+			"message": "Failed to logout",
+		})
 		return
 	}
 
-	respondJSON(w, http.StatusOK, entity.SuccessResponse{
+	c.JSON(http.StatusOK, entity.SuccessResponse{
 		Message: "Successfully logged out",
 	})
 }
 
 // ValidateToken обрабатывает POST /auth/validate (для других микросервисов)
-func (h *AuthHandler) ValidateToken(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) ValidateToken(c *gin.Context) {
 	// Извлекаем токен из заголовка
-	authHeader := r.Header.Get("Authorization")
+	authHeader := c.GetHeader("Authorization")
 	if authHeader == "" {
-		respondError(w, http.StatusBadRequest, "Authorization header required")
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Bad Request",
+			"message": "Authorization header required",
+		})
 		return
 	}
 
 	token := strings.TrimPrefix(authHeader, "Bearer ")
 	if token == authHeader {
-		respondError(w, http.StatusBadRequest, "Invalid authorization header format")
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Bad Request",
+			"message": "Invalid authorization header format",
+		})
 		return
 	}
 
-	claims, err := h.authService.ValidateToken(r.Context(), token)
+	claims, err := h.authService.ValidateToken(c.Request.Context(), token)
 	if err != nil {
 		if errors.Is(err, util.ErrExpiredToken) {
-			respondError(w, http.StatusUnauthorized, "Token has expired")
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error":   "Unauthorized",
+				"message": "Token has expired",
+			})
 			return
 		}
 		if errors.Is(err, util.ErrInvalidToken) {
-			respondError(w, http.StatusUnauthorized, "Invalid token")
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error":   "Unauthorized",
+				"message": "Invalid token",
+			})
 			return
 		}
-		respondError(w, http.StatusInternalServerError, "Failed to validate token")
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Internal Server Error",
+			"message": "Failed to validate token",
+		})
 		return
 	}
 
-	respondJSON(w, http.StatusOK, claims)
-}
-
-// respondJSON отправляет JSON ответ
-func respondJSON(w http.ResponseWriter, status int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
-}
-
-// respondError отправляет ответ об ошибке
-func respondError(w http.ResponseWriter, status int, message string) {
-	respondJSON(w, status, entity.ErrorResponse{
-		Error:   http.StatusText(status),
-		Message: message,
-	})
+	c.JSON(http.StatusOK, claims)
 }
 
 // formatValidationErrors форматирует ошибки валидации в читаемый формат

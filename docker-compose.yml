@@ -406,6 +406,84 @@ services:
       - "com.augustberries.service=background-worker"
       - "com.augustberries.description=Обработка заказов и конвертация валют"
 
+  # ==================== MONITORING ====================
+
+  # Prometheus - сбор и хранение метрик
+  prometheus:
+    image: prom/prometheus:v2.50.1
+    container_name: augustberries-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+      - '--storage.tsdb.retention.time=15d'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - backend_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Grafana - визуализация метрик
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: augustberries-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: false
+      GF_SERVER_ROOT_URL: http://localhost:3000
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    networks:
+      - backend_network
+    restart: unless-stopped
+
+  # Redis Exporter - экспортирует метрики Redis для Prometheus
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.58.0
+    container_name: augustberries-redis-exporter
+    environment:
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: redis_password
+    ports:
+      - "9121:9121"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - backend_network
+    restart: unless-stopped
+
+  # Kafka Exporter - экспортирует метрики Kafka (включая consumer lag)
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:latest
+    container_name: augustberries-kafka-exporter
+    command:
+      - '--kafka.server=kafka:29092'
+    ports:
+      - "9308:9308"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - backend_network
+    restart: unless-stopped
+
 # ==================== NETWORKS ====================
 
 networks:
@@ -421,3 +499,5 @@ volumes:
   mongodb-reviews-data:
   mongodb-reviews-config:
   redis-data:
+  prometheus-data:
+  grafana-data:
