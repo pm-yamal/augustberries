@@ -5,13 +5,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-// =============================================================================
-// HTTP Метрики (общие для всех сервисов)
-// =============================================================================
+// HTTP Metrics
 
-// HttpRequestsTotal - счётчик всех HTTP запросов
-// Labels: service, method, path, status
-// Пример запроса PromQL: rate(http_requests_total{service="orders"}[5m])
 var HttpRequestsTotal = promauto.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "http_requests_total",
@@ -20,20 +15,15 @@ var HttpRequestsTotal = promauto.NewCounterVec(
 	[]string{"service", "method", "path", "status"},
 )
 
-// HttpRequestDuration - гистограмма времени ответа (latency_seconds из ТЗ)
-// Labels: service, method, path
-// Пример: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))
 var HttpRequestDuration = promauto.NewHistogramVec(
 	prometheus.HistogramOpts{
-		Name: "http_request_duration_seconds",
-		Help: "Duration of HTTP requests in seconds",
-		// Бакеты для микросервисов: от 1ms до 10s
+		Name:    "http_request_duration_seconds",
+		Help:    "Duration of HTTP requests in seconds",
 		Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
 	},
 	[]string{"service", "method", "path"},
 )
 
-// HttpRequestsInFlight - текущее количество обрабатываемых запросов
 var HttpRequestsInFlight = promauto.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "http_requests_in_flight",
@@ -42,11 +32,8 @@ var HttpRequestsInFlight = promauto.NewGaugeVec(
 	[]string{"service"},
 )
 
-// =============================================================================
-// Database Метрики
-// =============================================================================
+// Database Metrics
 
-// DbQueryDuration - время выполнения SQL запросов
 var DbQueryDuration = promauto.NewHistogramVec(
 	prometheus.HistogramOpts{
 		Name:    "db_query_duration_seconds",
@@ -56,16 +43,14 @@ var DbQueryDuration = promauto.NewHistogramVec(
 	[]string{"service", "operation", "table"},
 )
 
-// DbConnectionsOpen - количество открытых соединений с БД
 var DbConnectionsOpen = promauto.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "db_connections_open",
 		Help: "Number of open database connections",
 	},
-	[]string{"service", "state"}, // state: idle, in_use
+	[]string{"service", "state"},
 )
 
-// DbErrors - счётчик ошибок базы данных
 var DbErrors = promauto.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "db_errors_total",
@@ -74,11 +59,8 @@ var DbErrors = promauto.NewCounterVec(
 	[]string{"service", "operation"},
 )
 
-// =============================================================================
-// Redis Метрики (redis_ops из ТЗ)
-// =============================================================================
+// Redis Metrics
 
-// RedisCacheHits - попадания в кеш
 var RedisCacheHits = promauto.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "redis_cache_hits_total",
@@ -87,7 +69,6 @@ var RedisCacheHits = promauto.NewCounterVec(
 	[]string{"service", "key_prefix"},
 )
 
-// RedisCacheMisses - промахи кеша
 var RedisCacheMisses = promauto.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "redis_cache_misses_total",
@@ -96,17 +77,15 @@ var RedisCacheMisses = promauto.NewCounterVec(
 	[]string{"service", "key_prefix"},
 )
 
-// RedisOperationDuration - время операций Redis
 var RedisOperationDuration = promauto.NewHistogramVec(
 	prometheus.HistogramOpts{
 		Name:    "redis_operation_duration_seconds",
 		Help:    "Duration of Redis operations in seconds",
 		Buckets: []float64{0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1},
 	},
-	[]string{"service", "operation"}, // operation: get, set, del, etc.
+	[]string{"service", "operation"},
 )
 
-// RedisErrors - ошибки Redis
 var RedisErrors = promauto.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "redis_errors_total",
@@ -115,11 +94,8 @@ var RedisErrors = promauto.NewCounterVec(
 	[]string{"service", "operation"},
 )
 
-// =============================================================================
-// Kafka Метрики (kafka_lag из ТЗ)
-// =============================================================================
+// Kafka Metrics
 
-// KafkaMessagesProduced - отправленные сообщения
 var KafkaMessagesProduced = promauto.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "kafka_messages_produced_total",
@@ -128,7 +104,6 @@ var KafkaMessagesProduced = promauto.NewCounterVec(
 	[]string{"service", "topic"},
 )
 
-// KafkaMessagesConsumed - полученные сообщения
 var KafkaMessagesConsumed = promauto.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "kafka_messages_consumed_total",
@@ -137,7 +112,6 @@ var KafkaMessagesConsumed = promauto.NewCounterVec(
 	[]string{"service", "topic", "group"},
 )
 
-// KafkaProduceDuration - время отправки сообщения
 var KafkaProduceDuration = promauto.NewHistogramVec(
 	prometheus.HistogramOpts{
 		Name:    "kafka_produce_duration_seconds",
@@ -147,7 +121,6 @@ var KafkaProduceDuration = promauto.NewHistogramVec(
 	[]string{"service", "topic"},
 )
 
-// KafkaConsumeDuration - время обработки сообщения
 var KafkaConsumeDuration = promauto.NewHistogramVec(
 	prometheus.HistogramOpts{
 		Name:    "kafka_consume_duration_seconds",
@@ -157,22 +130,16 @@ var KafkaConsumeDuration = promauto.NewHistogramVec(
 	[]string{"service", "topic"},
 )
 
-// KafkaErrors - ошибки Kafka
 var KafkaErrors = promauto.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "kafka_errors_total",
 		Help: "Total number of Kafka errors",
 	},
-	[]string{"service", "topic", "operation"}, // operation: produce, consume
+	[]string{"service", "topic", "operation"},
 )
 
-// =============================================================================
-// Business Метрики (специфичные для Augustberries)
-// =============================================================================
+// Auth Service Metrics
 
-// --- Auth Service ---
-
-// AuthRegistrations - регистрации пользователей
 var AuthRegistrations = promauto.NewCounter(
 	prometheus.CounterOpts{
 		Name: "auth_registrations_total",
@@ -180,27 +147,24 @@ var AuthRegistrations = promauto.NewCounter(
 	},
 )
 
-// AuthLogins - попытки входа
 var AuthLogins = promauto.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "auth_logins_total",
 		Help: "Total number of login attempts",
 	},
-	[]string{"status"}, // success, failed, blocked
+	[]string{"status"},
 )
 
-// AuthTokensIssued - выданные токены
 var AuthTokensIssued = promauto.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "auth_tokens_issued_total",
 		Help: "Total number of tokens issued",
 	},
-	[]string{"type"}, // access, refresh
+	[]string{"type"},
 )
 
-// --- Orders Service ---
+// Orders Service Metrics
 
-// OrdersCreated - созданные заказы
 var OrdersCreated = promauto.NewCounter(
 	prometheus.CounterOpts{
 		Name: "orders_created_total",
@@ -208,7 +172,6 @@ var OrdersCreated = promauto.NewCounter(
 	},
 )
 
-// OrdersTotal - общая сумма заказов
 var OrdersTotal = promauto.NewCounter(
 	prometheus.CounterOpts{
 		Name: "orders_total_amount",
@@ -216,18 +179,16 @@ var OrdersTotal = promauto.NewCounter(
 	},
 )
 
-// OrdersByStatus - заказы по статусам
 var OrdersByStatus = promauto.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "orders_by_status",
 		Help: "Number of orders by status",
 	},
-	[]string{"status"}, // pending, processing, shipped, delivered, cancelled
+	[]string{"status"},
 )
 
-// --- Reviews Service ---
+// Reviews Service Metrics
 
-// ReviewsCreated - созданные отзывы
 var ReviewsCreated = promauto.NewCounter(
 	prometheus.CounterOpts{
 		Name: "reviews_created_total",
@@ -235,7 +196,6 @@ var ReviewsCreated = promauto.NewCounter(
 	},
 )
 
-// ReviewsRating - распределение оценок
 var ReviewsRating = promauto.NewHistogramVec(
 	prometheus.HistogramOpts{
 		Name:    "reviews_rating",
@@ -245,27 +205,24 @@ var ReviewsRating = promauto.NewHistogramVec(
 	[]string{},
 )
 
-// --- Background Worker ---
+// Background Worker Metrics
 
-// WorkerOrdersProcessed - обработанные заказы
 var WorkerOrdersProcessed = promauto.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "worker_orders_processed_total",
 		Help: "Total number of orders processed by worker",
 	},
-	[]string{"status"}, // success, failed
+	[]string{"status"},
 )
 
-// WorkerExchangeRateUpdates - обновления курсов валют
 var WorkerExchangeRateUpdates = promauto.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "worker_exchange_rate_updates_total",
 		Help: "Total number of exchange rate updates",
 	},
-	[]string{"status"}, // success, failed
+	[]string{"status"},
 )
 
-// WorkerProcessingDuration - время обработки заказа
 var WorkerProcessingDuration = promauto.NewHistogram(
 	prometheus.HistogramOpts{
 		Name:    "worker_order_processing_duration_seconds",
