@@ -15,12 +15,10 @@ type userRepository struct {
 	db *pgxpool.Pool
 }
 
-// NewUserRepository создает новый репозиторий пользователей
 func NewUserRepository(db *pgxpool.Pool) UserRepository {
 	return &userRepository{db: db}
 }
 
-// Create создает нового пользователя
 func (r *userRepository) Create(ctx context.Context, user *entity.User) error {
 	query := `
 		INSERT INTO users (id, email, password_hash, name, role_id, created_at)
@@ -39,7 +37,6 @@ func (r *userRepository) Create(ctx context.Context, user *entity.User) error {
 	return nil
 }
 
-// GetByID получает пользователя по ID
 func (r *userRepository) GetByID(ctx context.Context, id uuid.UUID) (*entity.User, error) {
 	query := `SELECT id, email, password_hash, name, role_id, created_at FROM users WHERE id = $1`
 
@@ -60,7 +57,6 @@ func (r *userRepository) GetByID(ctx context.Context, id uuid.UUID) (*entity.Use
 	return &user, nil
 }
 
-// GetByEmail получает пользователя по email
 func (r *userRepository) GetByEmail(ctx context.Context, email string) (*entity.User, error) {
 	query := `SELECT id, email, password_hash, name, role_id, created_at FROM users WHERE email = $1`
 
@@ -81,7 +77,6 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*entity.
 	return &user, nil
 }
 
-// Update обновляет данные пользователя
 func (r *userRepository) Update(ctx context.Context, user *entity.User) error {
 	query := `
 		UPDATE users 
@@ -105,7 +100,6 @@ func (r *userRepository) Update(ctx context.Context, user *entity.User) error {
 	return nil
 }
 
-// Delete удаляет пользователя
 func (r *userRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	query := `DELETE FROM users WHERE id = $1`
 
@@ -121,7 +115,6 @@ func (r *userRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-// List получает список всех пользователей
 func (r *userRepository) List(ctx context.Context) ([]entity.User, error) {
 	query := `
 		SELECT id, email, password_hash, name, role_id, created_at 

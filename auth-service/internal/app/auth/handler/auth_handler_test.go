@@ -2,7 +2,6 @@ package handler
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -14,12 +13,17 @@ import (
 	"augustberries/auth-service/internal/app/auth/service"
 	"augustberries/auth-service/internal/app/auth/util"
 
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
+
+func init() {
+	gin.SetMode(gin.TestMode)
+}
 
 // Хелперы для создания тестового окружения
 
@@ -49,6 +53,24 @@ func newTestPermissions() []entity.Permission {
 	}
 }
 
+// setupTestRouter создаёт тестовый Gin router с одним хендлером
+func setupTestRouter(method, path string, handlerFunc gin.HandlerFunc) *gin.Engine {
+	router := gin.New()
+	switch method {
+	case http.MethodGet:
+		router.GET(path, handlerFunc)
+	case http.MethodPost:
+		router.POST(path, handlerFunc)
+	case http.MethodPut:
+		router.PUT(path, handlerFunc)
+	case http.MethodDelete:
+		router.DELETE(path, handlerFunc)
+	case http.MethodPatch:
+		router.PATCH(path, handlerFunc)
+	}
+	return router
+}
+
 // ==================== Register Handler Tests ====================
 
 func TestAuthHandler_Register_Success(t *testing.T) {
@@ -72,12 +94,13 @@ func TestAuthHandler_Register_Success(t *testing.T) {
 	}
 	body, _ := json.Marshal(reqBody)
 
+	router := setupTestRouter(http.MethodPost, "/auth/register", handler.Register)
 	req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.Register(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusCreated, rec.Code)
@@ -95,19 +118,20 @@ func TestAuthHandler_Register_InvalidBody(t *testing.T) {
 	// Arrange
 	handler, _, _, _, _ := newTestAuthHandler()
 
+	router := setupTestRouter(http.MethodPost, "/auth/register", handler.Register)
 	req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBufferString("invalid json"))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.Register(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 
-	var response entity.ErrorResponse
+	var response map[string]string
 	json.Unmarshal(rec.Body.Bytes(), &response)
-	assert.Equal(t, "Invalid request body", response.Message)
+	assert.Equal(t, "Invalid request body", response["message"])
 }
 
 func TestAuthHandler_Register_ValidationErrors(t *testing.T) {
@@ -145,17 +169,18 @@ func TestAuthHandler_Register_ValidationErrors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			body, _ := json.Marshal(tc.request)
 
+			router := setupTestRouter(http.MethodPost, "/auth/register", handler.Register)
 			req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBuffer(body))
 			req.Header.Set("Content-Type", "application/json")
 			rec := httptest.NewRecorder()
 
-			handler.Register(rec, req)
+			router.ServeHTTP(rec, req)
 
 			assert.Equal(t, http.StatusBadRequest, rec.Code)
 
-			var response entity.ErrorResponse
+			var response map[string]string
 			json.Unmarshal(rec.Body.Bytes(), &response)
-			assert.Contains(t, response.Message, tc.expected)
+			assert.Contains(t, response["message"], tc.expected)
 		})
 	}
 }
@@ -177,12 +202,13 @@ func TestAuthHandler_Register_UserAlreadyExists(t *testing.T) {
 	}
 	body, _ := json.Marshal(reqBody)
 
+	router := setupTestRouter(http.MethodPost, "/auth/register", handler.Register)
 	req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.Register(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusConflict, rec.Code)
@@ -217,12 +243,13 @@ func TestAuthHandler_Login_Success(t *testing.T) {
 	}
 	body, _ := json.Marshal(reqBody)
 
+	router := setupTestRouter(http.MethodPost, "/auth/login", handler.Login)
 	req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.Login(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -254,12 +281,13 @@ func TestAuthHandler_Login_InvalidCredentials(t *testing.T) {
 	}
 	body, _ := json.Marshal(reqBody)
 
+	router := setupTestRouter(http.MethodPost, "/auth/login", handler.Login)
 	req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.Login(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
@@ -277,12 +305,13 @@ func TestAuthHandler_Login_UserNotFound(t *testing.T) {
 	}
 	body, _ := json.Marshal(reqBody)
 
+	router := setupTestRouter(http.MethodPost, "/auth/login", handler.Login)
 	req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.Login(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
@@ -292,27 +321,25 @@ func TestAuthHandler_Login_UserNotFound(t *testing.T) {
 
 func TestAuthHandler_RefreshToken_Success(t *testing.T) {
 	// Arrange
-	handler, userRepo, roleRepo, tokenRepo, _ := newTestAuthHandler()
+	handler, userRepo, roleRepo, tokenRepo, jwtManager := newTestAuthHandler()
 
 	userID := uuid.New()
-	refreshToken := "valid-refresh-token"
+	refreshToken, _ := jwtManager.GenerateRefreshToken(userID)
 
-	storedToken := &entity.RefreshToken{
-		ID:        1,
-		UserID:    userID,
-		Token:     refreshToken,
-		ExpiresAt: time.Now().Add(24 * time.Hour),
-	}
 	user := &entity.User{
 		ID:     userID,
 		Email:  "test@example.com",
-		Name:   "Test",
+		Name:   "Test User",
 		RoleID: 1,
 	}
 	role := newTestRole()
 	permissions := newTestPermissions()
 
-	tokenRepo.On("GetRefreshToken", mock.Anything, refreshToken).Return(storedToken, nil)
+	tokenRepo.On("GetRefreshToken", mock.Anything, refreshToken).Return(&entity.RefreshToken{
+		UserID:    userID,
+		Token:     refreshToken,
+		ExpiresAt: time.Now().Add(7 * 24 * time.Hour),
+	}, nil)
 	tokenRepo.On("DeleteRefreshToken", mock.Anything, refreshToken).Return(nil)
 	userRepo.On("GetByID", mock.Anything, userID).Return(user, nil)
 	roleRepo.On("GetByID", mock.Anything, 1).Return(role, nil)
@@ -324,12 +351,13 @@ func TestAuthHandler_RefreshToken_Success(t *testing.T) {
 	}
 	body, _ := json.Marshal(reqBody)
 
+	router := setupTestRouter(http.MethodPost, "/auth/refresh", handler.RefreshToken)
 	req := httptest.NewRequest(http.MethodPost, "/auth/refresh", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.RefreshToken(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -353,12 +381,13 @@ func TestAuthHandler_RefreshToken_InvalidToken(t *testing.T) {
 	}
 	body, _ := json.Marshal(reqBody)
 
+	router := setupTestRouter(http.MethodPost, "/auth/refresh", handler.RefreshToken)
 	req := httptest.NewRequest(http.MethodPost, "/auth/refresh", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.RefreshToken(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
@@ -384,14 +413,18 @@ func TestAuthHandler_GetMe_Success(t *testing.T) {
 	roleRepo.On("GetByID", mock.Anything, 1).Return(role, nil)
 	roleRepo.On("GetPermissionsByRoleID", mock.Anything, 1).Return(permissions, nil)
 
+	// Создаём Gin контекст с user_id
+	router := gin.New()
+	router.GET("/auth/me", func(c *gin.Context) {
+		c.Set("user_id", userID)
+		handler.GetMe(c)
+	})
+
 	req := httptest.NewRequest(http.MethodGet, "/auth/me", nil)
-	// Добавляем userID в контекст (как делает middleware)
-	ctx := context.WithValue(req.Context(), "user_id", userID)
-	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.GetMe(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -408,12 +441,12 @@ func TestAuthHandler_GetMe_Unauthorized(t *testing.T) {
 	// Arrange
 	handler, _, _, _, _ := newTestAuthHandler()
 
+	router := setupTestRouter(http.MethodGet, "/auth/me", handler.GetMe)
 	req := httptest.NewRequest(http.MethodGet, "/auth/me", nil)
-	// Не добавляем userID в контекст
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.GetMe(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
@@ -431,14 +464,19 @@ func TestAuthHandler_Logout_Success(t *testing.T) {
 	tokenRepo.On("AddToBlacklist", mock.Anything, accessToken, mock.AnythingOfType("time.Time")).Return(nil)
 	tokenRepo.On("DeleteUserRefreshTokens", mock.Anything, userID).Return(nil)
 
+	// Создаём Gin контекст с user_id
+	router := gin.New()
+	router.POST("/auth/logout", func(c *gin.Context) {
+		c.Set("user_id", userID)
+		handler.Logout(c)
+	})
+
 	req := httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
 	req.Header.Set("Authorization", "Bearer "+accessToken)
-	ctx := context.WithValue(req.Context(), "user_id", userID)
-	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.Logout(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -450,13 +488,17 @@ func TestAuthHandler_Logout_NoAuthHeader(t *testing.T) {
 
 	userID := uuid.New()
 
+	router := gin.New()
+	router.POST("/auth/logout", func(c *gin.Context) {
+		c.Set("user_id", userID)
+		handler.Logout(c)
+	})
+
 	req := httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
-	ctx := context.WithValue(req.Context(), "user_id", userID)
-	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.Logout(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
@@ -468,14 +510,18 @@ func TestAuthHandler_Logout_InvalidAuthFormat(t *testing.T) {
 
 	userID := uuid.New()
 
+	router := gin.New()
+	router.POST("/auth/logout", func(c *gin.Context) {
+		c.Set("user_id", userID)
+		handler.Logout(c)
+	})
+
 	req := httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
 	req.Header.Set("Authorization", "InvalidFormat token")
-	ctx := context.WithValue(req.Context(), "user_id", userID)
-	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.Logout(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
@@ -492,12 +538,13 @@ func TestAuthHandler_ValidateToken_Success(t *testing.T) {
 
 	tokenRepo.On("IsBlacklisted", mock.Anything, accessToken).Return(false, nil)
 
+	router := setupTestRouter(http.MethodPost, "/auth/validate", handler.ValidateToken)
 	req := httptest.NewRequest(http.MethodPost, "/auth/validate", nil)
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.ValidateToken(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -514,11 +561,12 @@ func TestAuthHandler_ValidateToken_NoAuthHeader(t *testing.T) {
 	// Arrange
 	handler, _, _, _, _ := newTestAuthHandler()
 
+	router := setupTestRouter(http.MethodPost, "/auth/validate", handler.ValidateToken)
 	req := httptest.NewRequest(http.MethodPost, "/auth/validate", nil)
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.ValidateToken(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
@@ -533,12 +581,13 @@ func TestAuthHandler_ValidateToken_BlacklistedToken(t *testing.T) {
 
 	tokenRepo.On("IsBlacklisted", mock.Anything, accessToken).Return(true, nil)
 
+	router := setupTestRouter(http.MethodPost, "/auth/validate", handler.ValidateToken)
 	req := httptest.NewRequest(http.MethodPost, "/auth/validate", nil)
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.ValidateToken(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
@@ -557,12 +606,13 @@ func TestAuthHandler_ValidateToken_ExpiredToken(t *testing.T) {
 
 	tokenRepo.On("IsBlacklisted", mock.Anything, accessToken).Return(false, nil)
 
+	router := setupTestRouter(http.MethodPost, "/auth/validate", handler.ValidateToken)
 	req := httptest.NewRequest(http.MethodPost, "/auth/validate", nil)
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.ValidateToken(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
@@ -577,23 +627,24 @@ func TestFormatValidationErrors(t *testing.T) {
 	handler, _, _, _, _ := newTestAuthHandler()
 
 	reqBody := entity.RegisterRequest{
-		Email:    "",        // required
-		Password: "short",   // min=8
-		Name:     "",        // required
+		Email:    "",      // required
+		Password: "short", // min=8
+		Name:     "",      // required
 	}
 	body, _ := json.Marshal(reqBody)
 
+	router := setupTestRouter(http.MethodPost, "/auth/register", handler.Register)
 	req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
-	handler.Register(rec, req)
+	router.ServeHTTP(rec, req)
 
-	var response entity.ErrorResponse
+	var response map[string]string
 	json.Unmarshal(rec.Body.Bytes(), &response)
 
 	// Проверяем что все ошибки валидации присутствуют в сообщении
-	assert.Contains(t, response.Message, "Email")
-	assert.Contains(t, response.Message, "Password")
-	assert.Contains(t, response.Message, "Name")
+	assert.Contains(t, response["message"], "Email")
+	assert.Contains(t, response["message"], "Password")
+	assert.Contains(t, response["message"], "Name")
 }

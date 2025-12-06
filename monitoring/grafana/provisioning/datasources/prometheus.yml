@@ -1,0 +1,22 @@
+# Grafana Datasources Provisioning
+# ==================================
+# Этот файл автоматически настраивает Prometheus как источник данных
+# при первом запуске Grafana
+
+apiVersion: 1
+
+datasources:
+  # Prometheus - основной источник метрик
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      # Интервал по умолчанию для запросов
+      timeInterval: "15s"
+      # HTTP метод для запросов
+      httpMethod: POST
+      # Включить exemplars (для трейсинга, если добавим позже)
+      exemplarTraceIdDestinations: []

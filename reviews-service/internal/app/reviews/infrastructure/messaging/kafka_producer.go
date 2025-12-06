@@ -5,53 +5,48 @@ import (
 	"fmt"
 	"time"
 
+	"augustberries/pkg/metrics"
+
 	"github.com/segmentio/kafka-go"
 )
 
-// KafkaProducer обертка над Kafka writer для отправки событий
-// Используется для отправки событий REVIEW_CREATED в топик review_events
-// Реализует интерфейс MessagePublisher для dependency injection
 type KafkaProducer struct {
-	writer *kafka.Writer // Writer для асинхронной отправки сообщений в Kafka
+	writer *kafka.Writer
+	topic  string
 }
 
-// NewKafkaProducer создает новый Kafka producer
-// brokers - список брокеров Kafka в формате ["host:port"]
-// topic - имя топика для отправки событий (review_events)
 func NewKafkaProducer(brokers []string, topic string) *KafkaProducer {
 	writer := &kafka.Writer{
-		Addr:  kafka.TCP(brokers...), // Адреса брокеров Kafka
-		Topic: topic,                 // Топик для событий об отзывах
-		// Балансировка по наименьшему количеству байт для равномерного распределения
-		Balancer: &kafka.LeastBytes{},
-		// Настройки для production окружения
-		BatchSize:    100,              // Размер батча сообщений
-		BatchTimeout: 10 * time.Second, // Таймаут батча
+		Addr:         kafka.TCP(brokers...),
+		Topic:        topic,
+		Balancer:     &kafka.LeastBytes{},
+		BatchSize:    100,
+		BatchTimeout: 10 * time.Second,
 	}
 
-	return &KafkaProducer{writer: writer}
+	return &KafkaProducer{writer: writer, topic: topic}
 }
 
-// PublishMessage отправляет сообщение в Kafka
-// key - используется для партиционирования (обычно ReviewID для сохранения порядка)
-// value - JSON сериализованное событие ReviewEvent
-// Возвращает ошибку если не удалось отправить сообщение
 func (p *KafkaProducer) PublishMessage(ctx context.Context, key string, value []byte) error {
+	start := time.Now()
+
 	message := kafka.Message{
-		Key:   []byte(key), // Ключ для партиционирования
-		Value: value,       // Тело сообщения (JSON с информацией о событии)
-		Time:  time.Now(),  // Временная метка сообщения
+		Key:   []byte(key),
+		Value: value,
+		Time:  time.Now(),
 	}
 
-	// Отправляем сообщение в Kafka с контекстом для отмены
 	if err := p.writer.WriteMessages(ctx, message); err != nil {
+		metrics.KafkaErrors.WithLabelValues("reviews-service", p.topic, "produce").Inc()
 		return fmt.Errorf("failed to write message to kafka: %w", err)
 	}
+
+	metrics.KafkaMessagesProduced.WithLabelValues("reviews-service", p.topic).Inc()
+	metrics.KafkaProduceDuration.WithLabelValues("reviews-service", p.topic).Observe(time.Since(start).Seconds())
 
 	return nil
 }
 
-// Close закрывает Kafka writer и освобождает ресурсы
 func (p *KafkaProducer) Close() error {
 	return p.writer.Close()
 }

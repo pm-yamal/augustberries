@@ -54,7 +54,6 @@ func (r *roleRepository) GetByName(ctx context.Context, name string) (*entity.Ro
 	return &role, nil
 }
 
-// GetPermissionsByRoleID получает все разрешения для роли
 func (r *roleRepository) GetPermissionsByRoleID(ctx context.Context, roleID int) ([]entity.Permission, error) {
 	query := `
 		SELECT p.id, p.code, p.description
@@ -86,7 +85,6 @@ func (r *roleRepository) GetPermissionsByRoleID(ctx context.Context, roleID int)
 	return permissions, nil
 }
 
-// List получает список всех ролей
 func (r *roleRepository) List(ctx context.Context) ([]entity.Role, error) {
 	query := `SELECT id, name, description FROM roles ORDER BY name`
 
@@ -112,7 +110,6 @@ func (r *roleRepository) List(ctx context.Context) ([]entity.Role, error) {
 	return roles, nil
 }
 
-// Create создает новую роль
 func (r *roleRepository) Create(ctx context.Context, role *entity.Role) error {
 	query := `
 		INSERT INTO roles (name, description)
@@ -128,7 +125,6 @@ func (r *roleRepository) Create(ctx context.Context, role *entity.Role) error {
 	return nil
 }
 
-// Update обновляет роль
 func (r *roleRepository) Update(ctx context.Context, role *entity.Role) error {
 	query := `
 		UPDATE roles 
@@ -148,7 +144,6 @@ func (r *roleRepository) Update(ctx context.Context, role *entity.Role) error {
 	return nil
 }
 
-// Delete удаляет роль
 func (r *roleRepository) Delete(ctx context.Context, id int) error {
 	query := `DELETE FROM roles WHERE id = $1`
 
@@ -164,7 +159,6 @@ func (r *roleRepository) Delete(ctx context.Context, id int) error {
 	return nil
 }
 
-// ListPermissions получает список всех разрешений
 func (r *roleRepository) ListPermissions(ctx context.Context) ([]entity.Permission, error) {
 	query := `SELECT id, code, description FROM permissions ORDER BY code`
 
@@ -190,7 +184,6 @@ func (r *roleRepository) ListPermissions(ctx context.Context) ([]entity.Permissi
 	return permissions, nil
 }
 
-// CreatePermission создает новое разрешение
 func (r *roleRepository) CreatePermission(ctx context.Context, permission *entity.Permission) error {
 	query := `
 		INSERT INTO permissions (code, description)
@@ -206,7 +199,6 @@ func (r *roleRepository) CreatePermission(ctx context.Context, permission *entit
 	return nil
 }
 
-// DeletePermission удаляет разрешение
 func (r *roleRepository) DeletePermission(ctx context.Context, id int) error {
 	query := `DELETE FROM permissions WHERE id = $1`
 
@@ -222,22 +214,18 @@ func (r *roleRepository) DeletePermission(ctx context.Context, id int) error {
 	return nil
 }
 
-// AssignPermissions назначает разрешения роли
 func (r *roleRepository) AssignPermissions(ctx context.Context, roleID int, permissionIDs []int) error {
-	// Используем транзакцию для атомарности
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback(ctx)
 
-	// Удаляем старые связи
 	deleteQuery := `DELETE FROM roles_permissions WHERE role_id = $1`
 	if _, err := tx.Exec(ctx, deleteQuery, roleID); err != nil {
 		return fmt.Errorf("failed to delete old permissions: %w", err)
 	}
 
-	// Добавляем новые связи
 	insertQuery := `INSERT INTO roles_permissions (role_id, permission_id) VALUES ($1, $2)`
 	for _, permID := range permissionIDs {
 		if _, err := tx.Exec(ctx, insertQuery, roleID, permID); err != nil {
@@ -252,7 +240,6 @@ func (r *roleRepository) AssignPermissions(ctx context.Context, roleID int, perm
 	return nil
 }
 
-// RemovePermissions удаляет разрешения у роли
 func (r *roleRepository) RemovePermissions(ctx context.Context, roleID int, permissionIDs []int) error {
 	query := `DELETE FROM roles_permissions WHERE role_id = $1 AND permission_id = ANY($2)`
 

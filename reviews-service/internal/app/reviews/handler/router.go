@@ -4,12 +4,18 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	"augustberries/pkg/metrics"
 )
 
 // SetupRoutes настраивает все маршруты Reviews Service с использованием Gin
 // Применяет Auth middleware для защиты эндпоинтов
 func SetupRoutes(reviewHandler *ReviewHandler, authMiddleware *AuthMiddleware) *gin.Engine {
 	router := gin.Default()
+
+	// Prometheus metrics middleware
+	router.Use(metrics.GinPrometheusMiddleware("reviews-service"))
 
 	// Health check endpoint - публичный, без аутентификации
 	router.GET("/health", func(c *gin.Context) {
@@ -18,6 +24,9 @@ func SetupRoutes(reviewHandler *ReviewHandler, authMiddleware *AuthMiddleware) *
 			"service": "reviews-service",
 		})
 	})
+
+	// Prometheus metrics endpoint
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// Reviews endpoints - все требуют аутентификации
 	reviews := router.Group("/reviews")

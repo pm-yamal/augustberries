@@ -1,0 +1,96 @@
+# Prometheus Configuration for Augustberries
+# =============================================
+
+global:
+  # Как часто собирать метрики (15 секунд - стандарт)
+  scrape_interval: 15s
+  
+  # Как часто оценивать правила алертинга
+  evaluation_interval: 15s
+  
+  # Метки, добавляемые ко всем метрикам
+  external_labels:
+    project: 'augustberries'
+    environment: 'development'
+
+# Правила алертинга (опционально)
+# rule_files:
+#   - "alerts/*.yml"
+
+# Конфигурация сбора метрик
+scrape_configs:
+  # ==================== PROMETHEUS ====================
+  # Prometheus собирает метрики о самом себе
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    metrics_path: /metrics
+
+  # ==================== MICROSERVICES ====================
+  
+  # Auth Service - аутентификация и авторизация
+  - job_name: 'auth-service'
+    static_configs:
+      - targets: ['auth-service:8080']
+    metrics_path: /metrics
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
+  # Catalog Service - товары и категории
+  - job_name: 'catalog-service'
+    static_configs:
+      - targets: ['catalog-service:8081']
+    metrics_path: /metrics
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
+  # Orders Service - заказы
+  - job_name: 'orders-service'
+    static_configs:
+      - targets: ['orders-service:8082']
+    metrics_path: /metrics
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
+  # Reviews Service - отзывы
+  - job_name: 'reviews-service'
+    static_configs:
+      - targets: ['reviews-service:8083']
+    metrics_path: /metrics
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
+  # Background Worker - обработка заказов
+  - job_name: 'background-worker'
+    static_configs:
+      - targets: ['background-worker-service:8080']
+    metrics_path: /metrics
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
+  # ==================== INFRASTRUCTURE ====================
+  
+  # Redis Exporter - метрики Redis
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    scrape_interval: 15s
+
+  # Kafka Exporter - метрики Kafka (включая consumer lag)
+  - job_name: 'kafka'
+    static_configs:
+      - targets: ['kafka-exporter:9308']
+    scrape_interval: 15s
+
+  # PostgreSQL Exporters (опционально, если добавим)
+  # - job_name: 'postgres-auth'
+  #   static_configs:
+  #     - targets: ['postgres-exporter-auth:9187']
+  # 
+  # - job_name: 'postgres-catalog'
+  #   static_configs:
+  #     - targets: ['postgres-exporter-catalog:9187']
+  # 
+  # - job_name: 'postgres-orders'
+  #   static_configs:
+  #     - targets: ['postgres-exporter-orders:9187']

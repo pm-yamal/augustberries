@@ -1,22 +1,25 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
-	"augustberries/auth-service/internal/app/auth/entity"
 	"augustberries/auth-service/internal/app/auth/repository/mocks"
 	"augustberries/auth-service/internal/app/auth/service"
 	"augustberries/auth-service/internal/app/auth/util"
 
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
+
+func init() {
+	gin.SetMode(gin.TestMode)
+}
 
 // Хелпер для создания тестового middleware
 func newTestAuthMiddleware() (*AuthMiddleware, *mocks.MockTokenRepository, *util.JWTManager) {
@@ -31,22 +34,6 @@ func newTestAuthMiddleware() (*AuthMiddleware, *mocks.MockTokenRepository, *util
 	return middleware, tokenRepo, jwtManager
 }
 
-// Тестовый handler который проверяет контекст
-func testHandler(t *testing.T, expectedUserID uuid.UUID) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := r.Context().Value("user_id").(uuid.UUID)
-		assert.True(t, ok, "user_id should be in context")
-		assert.Equal(t, expectedUserID, userID)
-
-		email, ok := r.Context().Value("email").(string)
-		assert.True(t, ok, "email should be in context")
-		assert.NotEmpty(t, email)
-
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
-	}
-}
-
 // ==================== Authenticate Tests ====================
 
 func TestAuthMiddleware_Authenticate_Success(t *testing.T) {
@@ -59,14 +46,19 @@ func TestAuthMiddleware_Authenticate_Success(t *testing.T) {
 
 	tokenRepo.On("IsBlacklisted", mock.Anything, accessToken).Return(false, nil)
 
-	handler := middleware.Authenticate(testHandler(t, userID))
+	router := gin.New()
+	router.GET("/protected", middleware.Authenticate(), func(c *gin.Context) {
+		gotUserID, _ := c.Get("user_id")
+		assert.Equal(t, userID, gotUserID)
+		c.String(http.StatusOK, "OK")
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.ServeHTTP(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -79,31 +71,28 @@ func TestAuthMiddleware_Authenticate_NoAuthHeader(t *testing.T) {
 	// Arrange
 	middleware, _, _ := newTestAuthMiddleware()
 
-	handler := middleware.Authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	router := gin.New()
+	router.GET("/protected", middleware.Authenticate(), func(c *gin.Context) {
 		t.Error("Handler should not be called")
-	}))
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.ServeHTTP(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 
-	var response entity.ErrorResponse
+	var response map[string]string
 	json.Unmarshal(rec.Body.Bytes(), &response)
-	assert.Equal(t, "Authorization header required", response.Message)
+	assert.Equal(t, "Authorization header required", response["message"])
 }
 
 func TestAuthMiddleware_Authenticate_InvalidFormat(t *testing.T) {
 	// Arrange
 	middleware, _, _ := newTestAuthMiddleware()
-
-	handler := middleware.Authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Error("Handler should not be called")
-	}))
 
 	testCases := []struct {
 		name       string
@@ -117,11 +106,16 @@ func TestAuthMiddleware_Authenticate_InvalidFormat(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			router := gin.New()
+			router.GET("/protected", middleware.Authenticate(), func(c *gin.Context) {
+				t.Error("Handler should not be called")
+			})
+
 			req := httptest.NewRequest(http.MethodGet, "/protected", nil)
 			req.Header.Set("Authorization", tc.authHeader)
 			rec := httptest.NewRecorder()
 
-			handler.ServeHTTP(rec, req)
+			router.ServeHTTP(rec, req)
 
 			assert.Equal(t, http.StatusUnauthorized, rec.Code)
 		})
@@ -134,23 +128,24 @@ func TestAuthMiddleware_Authenticate_InvalidToken(t *testing.T) {
 
 	tokenRepo.On("IsBlacklisted", mock.Anything, "invalid-token").Return(false, nil)
 
-	handler := middleware.Authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	router := gin.New()
+	router.GET("/protected", middleware.Authenticate(), func(c *gin.Context) {
 		t.Error("Handler should not be called")
-	}))
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
 	req.Header.Set("Authorization", "Bearer invalid-token")
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.ServeHTTP(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 
-	var response entity.ErrorResponse
+	var response map[string]string
 	json.Unmarshal(rec.Body.Bytes(), &response)
-	assert.Equal(t, "Invalid token", response.Message)
+	assert.Equal(t, "Invalid token", response["message"])
 }
 
 func TestAuthMiddleware_Authenticate_ExpiredToken(t *testing.T) {
@@ -166,23 +161,24 @@ func TestAuthMiddleware_Authenticate_ExpiredToken(t *testing.T) {
 
 	tokenRepo.On("IsBlacklisted", mock.Anything, accessToken).Return(false, nil)
 
-	handler := middleware.Authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	router := gin.New()
+	router.GET("/protected", middleware.Authenticate(), func(c *gin.Context) {
 		t.Error("Handler should not be called")
-	}))
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.ServeHTTP(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 
-	var response entity.ErrorResponse
+	var response map[string]string
 	json.Unmarshal(rec.Body.Bytes(), &response)
-	assert.Equal(t, "Token has expired", response.Message)
+	assert.Equal(t, "Token has expired", response["message"])
 }
 
 func TestAuthMiddleware_Authenticate_BlacklistedToken(t *testing.T) {
@@ -194,16 +190,17 @@ func TestAuthMiddleware_Authenticate_BlacklistedToken(t *testing.T) {
 
 	tokenRepo.On("IsBlacklisted", mock.Anything, accessToken).Return(true, nil)
 
-	handler := middleware.Authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	router := gin.New()
+	router.GET("/protected", middleware.Authenticate(), func(c *gin.Context) {
 		t.Error("Handler should not be called")
-	}))
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.ServeHTTP(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
@@ -223,23 +220,29 @@ func TestAuthMiddleware_Authenticate_ContextValues(t *testing.T) {
 
 	tokenRepo.On("IsBlacklisted", mock.Anything, accessToken).Return(false, nil)
 
-	// Handler который проверяет все значения контекста
-	handler := middleware.Authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, userID, r.Context().Value("user_id"))
-		assert.Equal(t, email, r.Context().Value("email"))
-		assert.Equal(t, roleID, r.Context().Value("role_id"))
-		assert.Equal(t, roleName, r.Context().Value("role_name"))
-		assert.ElementsMatch(t, permissions, r.Context().Value("permissions"))
+	router := gin.New()
+	router.GET("/protected", middleware.Authenticate(), func(c *gin.Context) {
+		gotUserID, _ := c.Get("user_id")
+		gotEmail, _ := c.Get("email")
+		gotRoleID, _ := c.Get("role_id")
+		gotRoleName, _ := c.Get("role_name")
+		gotPermissions, _ := c.Get("permissions")
 
-		w.WriteHeader(http.StatusOK)
-	}))
+		assert.Equal(t, userID, gotUserID)
+		assert.Equal(t, email, gotEmail)
+		assert.Equal(t, roleID, gotRoleID)
+		assert.Equal(t, roleName, gotRoleName)
+		assert.ElementsMatch(t, permissions, gotPermissions)
+
+		c.Status(http.StatusOK)
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.ServeHTTP(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -251,18 +254,19 @@ func TestAuthMiddleware_RequireRole_Success(t *testing.T) {
 	// Arrange
 	middleware, _, _ := newTestAuthMiddleware()
 
-	handler := middleware.RequireRole("admin", "manager")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
-	}))
+	router := gin.New()
+	router.GET("/admin", func(c *gin.Context) {
+		c.Set("role_name", "admin")
+		c.Next()
+	}, middleware.RequireRole("admin", "manager"), func(c *gin.Context) {
+		c.String(http.StatusOK, "OK")
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
-	ctx := context.WithValue(req.Context(), "role_name", "admin")
-	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.ServeHTTP(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -272,17 +276,19 @@ func TestAuthMiddleware_RequireRole_MatchSecondRole(t *testing.T) {
 	// Arrange
 	middleware, _, _ := newTestAuthMiddleware()
 
-	handler := middleware.RequireRole("admin", "manager")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
+	router := gin.New()
+	router.GET("/admin", func(c *gin.Context) {
+		c.Set("role_name", "manager")
+		c.Next()
+	}, middleware.RequireRole("admin", "manager"), func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
-	ctx := context.WithValue(req.Context(), "role_name", "manager")
-	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.ServeHTTP(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -292,40 +298,42 @@ func TestAuthMiddleware_RequireRole_Forbidden(t *testing.T) {
 	// Arrange
 	middleware, _, _ := newTestAuthMiddleware()
 
-	handler := middleware.RequireRole("admin")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	router := gin.New()
+	router.GET("/admin", func(c *gin.Context) {
+		c.Set("role_name", "user")
+		c.Next()
+	}, middleware.RequireRole("admin"), func(c *gin.Context) {
 		t.Error("Handler should not be called")
-	}))
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
-	ctx := context.WithValue(req.Context(), "role_name", "user")
-	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.ServeHTTP(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusForbidden, rec.Code)
 
-	var response entity.ErrorResponse
+	var response map[string]string
 	json.Unmarshal(rec.Body.Bytes(), &response)
-	assert.Equal(t, "Insufficient permissions", response.Message)
+	assert.Equal(t, "Insufficient permissions", response["message"])
 }
 
 func TestAuthMiddleware_RequireRole_NoRoleInContext(t *testing.T) {
 	// Arrange
 	middleware, _, _ := newTestAuthMiddleware()
 
-	handler := middleware.RequireRole("admin")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	router := gin.New()
+	router.GET("/admin", middleware.RequireRole("admin"), func(c *gin.Context) {
 		t.Error("Handler should not be called")
-	}))
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
-	// Не добавляем role_name в контекст
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.ServeHTTP(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
@@ -337,18 +345,19 @@ func TestAuthMiddleware_RequirePermission_Success(t *testing.T) {
 	// Arrange
 	middleware, _, _ := newTestAuthMiddleware()
 
-	handler := middleware.RequirePermission("product.create")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
-	}))
+	router := gin.New()
+	router.POST("/products", func(c *gin.Context) {
+		c.Set("permissions", []string{"product.read", "product.create", "order.read"})
+		c.Next()
+	}, middleware.RequirePermission("product.create"), func(c *gin.Context) {
+		c.String(http.StatusOK, "OK")
+	})
 
 	req := httptest.NewRequest(http.MethodPost, "/products", nil)
-	ctx := context.WithValue(req.Context(), "permissions", []string{"product.read", "product.create", "order.read"})
-	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.ServeHTTP(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -358,40 +367,42 @@ func TestAuthMiddleware_RequirePermission_Forbidden(t *testing.T) {
 	// Arrange
 	middleware, _, _ := newTestAuthMiddleware()
 
-	handler := middleware.RequirePermission("product.delete")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	router := gin.New()
+	router.DELETE("/products/1", func(c *gin.Context) {
+		c.Set("permissions", []string{"product.read", "product.create"})
+		c.Next()
+	}, middleware.RequirePermission("product.delete"), func(c *gin.Context) {
 		t.Error("Handler should not be called")
-	}))
+	})
 
 	req := httptest.NewRequest(http.MethodDelete, "/products/1", nil)
-	ctx := context.WithValue(req.Context(), "permissions", []string{"product.read", "product.create"})
-	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.ServeHTTP(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusForbidden, rec.Code)
 
-	var response entity.ErrorResponse
+	var response map[string]string
 	json.Unmarshal(rec.Body.Bytes(), &response)
-	assert.Equal(t, "Insufficient permissions", response.Message)
+	assert.Equal(t, "Insufficient permissions", response["message"])
 }
 
 func TestAuthMiddleware_RequirePermission_NoPermissionsInContext(t *testing.T) {
 	// Arrange
 	middleware, _, _ := newTestAuthMiddleware()
 
-	handler := middleware.RequirePermission("product.create")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	router := gin.New()
+	router.POST("/products", middleware.RequirePermission("product.create"), func(c *gin.Context) {
 		t.Error("Handler should not be called")
-	}))
+	})
 
 	req := httptest.NewRequest(http.MethodPost, "/products", nil)
-	// Не добавляем permissions в контекст
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.ServeHTTP(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
@@ -401,17 +412,19 @@ func TestAuthMiddleware_RequirePermission_EmptyPermissions(t *testing.T) {
 	// Arrange
 	middleware, _, _ := newTestAuthMiddleware()
 
-	handler := middleware.RequirePermission("product.create")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	router := gin.New()
+	router.POST("/products", func(c *gin.Context) {
+		c.Set("permissions", []string{})
+		c.Next()
+	}, middleware.RequirePermission("product.create"), func(c *gin.Context) {
 		t.Error("Handler should not be called")
-	}))
+	})
 
 	req := httptest.NewRequest(http.MethodPost, "/products", nil)
-	ctx := context.WithValue(req.Context(), "permissions", []string{})
-	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 
 	// Act
-	handler.ServeHTTP(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusForbidden, rec.Code)
@@ -430,18 +443,14 @@ func TestAuthMiddleware_ChainedMiddlewares(t *testing.T) {
 
 	tokenRepo.On("IsBlacklisted", mock.Anything, accessToken).Return(false, nil)
 
-	// Цепочка middleware
-	finalHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Success"))
-	})
-
-	chain := middleware.Authenticate(
-		middleware.RequireRole("admin")(
-			middleware.RequirePermission("product.create")(
-				finalHandler,
-			),
-		),
+	router := gin.New()
+	router.POST("/admin/products",
+		middleware.Authenticate(),
+		middleware.RequireRole("admin"),
+		middleware.RequirePermission("product.create"),
+		func(c *gin.Context) {
+			c.String(http.StatusOK, "Success")
+		},
 	)
 
 	req := httptest.NewRequest(http.MethodPost, "/admin/products", nil)
@@ -449,7 +458,7 @@ func TestAuthMiddleware_ChainedMiddlewares(t *testing.T) {
 	rec := httptest.NewRecorder()
 
 	// Act
-	chain.ServeHTTP(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -467,16 +476,14 @@ func TestAuthMiddleware_ChainedMiddlewares_FailsAtRole(t *testing.T) {
 
 	tokenRepo.On("IsBlacklisted", mock.Anything, accessToken).Return(false, nil)
 
-	finalHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Error("Handler should not be called")
-	})
-
-	chain := middleware.Authenticate(
-		middleware.RequireRole("admin")(
-			middleware.RequirePermission("product.create")(
-				finalHandler,
-			),
-		),
+	router := gin.New()
+	router.POST("/admin/products",
+		middleware.Authenticate(),
+		middleware.RequireRole("admin"),
+		middleware.RequirePermission("product.create"),
+		func(c *gin.Context) {
+			t.Error("Handler should not be called")
+		},
 	)
 
 	req := httptest.NewRequest(http.MethodPost, "/admin/products", nil)
@@ -484,7 +491,7 @@ func TestAuthMiddleware_ChainedMiddlewares_FailsAtRole(t *testing.T) {
 	rec := httptest.NewRecorder()
 
 	// Act
-	chain.ServeHTTP(rec, req)
+	router.ServeHTTP(rec, req)
 
 	// Assert
 	assert.Equal(t, http.StatusForbidden, rec.Code)

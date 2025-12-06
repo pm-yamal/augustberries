@@ -15,12 +15,10 @@ type tokenRepository struct {
 	db *pgxpool.Pool
 }
 
-// NewTokenRepository создает новый репозиторий токенов
 func NewTokenRepository(db *pgxpool.Pool) TokenRepository {
 	return &tokenRepository{db: db}
 }
 
-// SaveRefreshToken сохраняет refresh токен в БД
 func (r *tokenRepository) SaveRefreshToken(ctx context.Context, userID uuid.UUID, token string, expiresAt time.Time) error {
 	query := `
 		INSERT INTO refresh_tokens (user_id, token, expires_at, created_at)
@@ -35,7 +33,6 @@ func (r *tokenRepository) SaveRefreshToken(ctx context.Context, userID uuid.UUID
 	return nil
 }
 
-// GetRefreshToken получает refresh токен из БД
 func (r *tokenRepository) GetRefreshToken(ctx context.Context, token string) (*entity.RefreshToken, error) {
 	query := `
 		SELECT id, user_id, token, expires_at, created_at 
@@ -59,7 +56,6 @@ func (r *tokenRepository) GetRefreshToken(ctx context.Context, token string) (*e
 	return &refreshToken, nil
 }
 
-// DeleteRefreshToken удаляет конкретный refresh токен
 func (r *tokenRepository) DeleteRefreshToken(ctx context.Context, token string) error {
 	query := `DELETE FROM refresh_tokens WHERE token = $1`
 
@@ -71,7 +67,6 @@ func (r *tokenRepository) DeleteRefreshToken(ctx context.Context, token string) 
 	return nil
 }
 
-// DeleteUserRefreshTokens удаляет все refresh токены пользователя
 func (r *tokenRepository) DeleteUserRefreshTokens(ctx context.Context, userID uuid.UUID) error {
 	query := `DELETE FROM refresh_tokens WHERE user_id = $1`
 
@@ -83,7 +78,6 @@ func (r *tokenRepository) DeleteUserRefreshTokens(ctx context.Context, userID uu
 	return nil
 }
 
-// AddToBlacklist добавляет токен в черный список
 func (r *tokenRepository) AddToBlacklist(ctx context.Context, token string, expiresAt time.Time) error {
 	query := `
 		INSERT INTO blacklisted_tokens (token, expires_at, created_at)
@@ -98,7 +92,6 @@ func (r *tokenRepository) AddToBlacklist(ctx context.Context, token string, expi
 	return nil
 }
 
-// IsBlacklisted проверяет, находится ли токен в черном списке
 func (r *tokenRepository) IsBlacklisted(ctx context.Context, token string) (bool, error) {
 	query := `SELECT EXISTS(SELECT 1 FROM blacklisted_tokens WHERE token = $1 AND expires_at > $2)`
 
@@ -112,15 +105,12 @@ func (r *tokenRepository) IsBlacklisted(ctx context.Context, token string) (bool
 	return exists, nil
 }
 
-// CleanupExpiredTokens удаляет истекшие токены из обеих таблиц
 func (r *tokenRepository) CleanupExpiredTokens(ctx context.Context) error {
-	// Удаляем истекшие refresh токены
 	query1 := `DELETE FROM refresh_tokens WHERE expires_at < $1`
 	if _, err := r.db.Exec(ctx, query1, time.Now()); err != nil {
 		return fmt.Errorf("failed to cleanup expired refresh tokens: %w", err)
 	}
 
-	// Удаляем истекшие токены из черного списка
 	query2 := `DELETE FROM blacklisted_tokens WHERE expires_at < $1`
 	if _, err := r.db.Exec(ctx, query2, time.Now()); err != nil {
 		return fmt.Errorf("failed to cleanup expired blacklisted tokens: %w", err)
