@@ -3,84 +3,88 @@ package handler
 import (
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/cors"
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	"augustberries/pkg/metrics"
 )
 
-// SetupRoutes настраивает все маршруты приложения с использованием chi router
-func SetupRoutes(authHandler *AuthHandler, authMiddleware *AuthMiddleware) *chi.Mux {
-	router := chi.NewRouter()
+// SetupRoutes настраивает все маршруты приложения с использованием Gin
+func SetupRoutes(authHandler *AuthHandler, authMiddleware *AuthMiddleware) *gin.Engine {
+	router := gin.Default()
 
-	// Глобальные middleware от chi
-	router.Use(middleware.RequestID)
-	router.Use(middleware.RealIP)
-	router.Use(middleware.Logger)
-	router.Use(middleware.Recoverer)
-	router.Use(middleware.Compress(5))
+	// Prometheus metrics middleware
+	router.Use(metrics.GinPrometheusMiddleware("auth-service"))
 
 	// CORS настройки
-	router.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"https://*", "http://*"},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
-		ExposedHeaders:   []string{"Link"},
+	router.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"https://*", "http://*"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposeHeaders:    []string{"Link"},
 		AllowCredentials: true,
 		MaxAge:           300,
 	}))
 
 	// Health check endpoint
-	router.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok","service":"auth-service"}`))
-	})
-
-	// Публичные эндпоинты (без аутентификации)
-	router.Route("/auth", func(r chi.Router) {
-		r.Post("/register", authHandler.Register)
-		r.Post("/login", authHandler.Login)
-		r.Post("/refresh", authHandler.RefreshToken)
-		r.Post("/validate", authHandler.ValidateToken)
-
-		// Защищенные эндпоинты (требуют аутентификации)
-		r.Group(func(r chi.Router) {
-			r.Use(authMiddleware.Authenticate)
-			r.Get("/me", authHandler.GetMe)
-			r.Post("/logout", authHandler.Logout)
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status":  "ok",
+			"service": "auth-service",
 		})
 	})
 
-	// Пример использования middleware для проверки ролей
-	router.Route("/admin", func(r chi.Router) {
-		r.Use(authMiddleware.Authenticate)
-		r.Use(authMiddleware.RequireRole("admin"))
+	// Prometheus metrics endpoint
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-		r.Get("/users", func(w http.ResponseWriter, r *http.Request) {
-			respondJSON(w, http.StatusOK, map[string]string{
+	// Публичные эндпоинты (без аутентификации)
+	auth := router.Group("/auth")
+	{
+		auth.POST("/register", authHandler.Register)
+		auth.POST("/login", authHandler.Login)
+		auth.POST("/refresh", authHandler.RefreshToken)
+		auth.POST("/validate", authHandler.ValidateToken)
+
+		// Защищенные эндпоинты (требуют аутентификации)
+		protected := auth.Group("")
+		protected.Use(authMiddleware.Authenticate())
+		{
+			protected.GET("/me", authHandler.GetMe)
+			protected.POST("/logout", authHandler.Logout)
+		}
+	}
+
+	// Admin эндпоинты - только для администраторов
+	admin := router.Group("/admin")
+	admin.Use(authMiddleware.Authenticate())
+	admin.Use(authMiddleware.RequireRole("admin"))
+	{
+		admin.GET("/users", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{
 				"message": "Admin only endpoint - list users",
 			})
 		})
-	})
+	}
 
-	// Пример использования проверки разрешений
-	router.Route("/api/products", func(r chi.Router) {
-		r.Use(authMiddleware.Authenticate)
-
+	// API эндпоинты с проверкой разрешений
+	api := router.Group("/api/products")
+	api.Use(authMiddleware.Authenticate())
+	{
 		// Любой авторизованный пользователь может читать
-		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-			respondJSON(w, http.StatusOK, map[string]string{
+		api.GET("", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{
 				"message": "List products",
 			})
 		})
 
 		// Только с разрешением product.create
-		r.With(authMiddleware.RequirePermission("product.create")).Post("/", func(w http.ResponseWriter, r *http.Request) {
-			respondJSON(w, http.StatusCreated, map[string]string{
+		api.POST("", authMiddleware.RequirePermission("product.create"), func(c *gin.Context) {
+			c.JSON(http.StatusCreated, gin.H{
 				"message": "Product created",
 			})
 		})
-	})
+	}
 
 	return router
 }

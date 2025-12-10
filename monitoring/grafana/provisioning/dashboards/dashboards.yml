@@ -1,0 +1,17 @@
+# Grafana Dashboard Provisioning
+# ================================
+# Автоматически загружает дашборды при старте Grafana
+
+apiVersion: 1
+
+providers:
+  - name: 'Augustberries Dashboards'
+    orgId: 1
+    folder: 'Augustberries'
+    folderUid: 'augustberries'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

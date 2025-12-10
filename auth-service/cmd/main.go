@@ -71,7 +71,7 @@ func main() {
 	authHandler := handler.NewAuthHandler(authService)
 	authMiddleware := handler.NewAuthMiddleware(authService)
 
-	// Настраиваем маршруты с chi router
+	// Настраиваем маршруты с Gin router
 	router := handler.SetupRoutes(authHandler, authMiddleware)
 
 	// Создаем HTTP сервер

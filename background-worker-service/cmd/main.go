@@ -16,6 +16,7 @@ import (
 	"augustberries/background-worker-service/internal/app/background-worker/repository"
 	"augustberries/background-worker-service/internal/app/background-worker/service"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -109,6 +110,9 @@ func main() {
 	mux := http.NewServeMux()
 	healthHandler.RegisterRoutes(mux)
 
+	// Prometheus metrics endpoint
+	mux.Handle("/metrics", promhttp.Handler())
+
 	httpServer := &http.Server{
 		Addr:    ":8080",
 		Handler: mux,
@@ -126,10 +130,11 @@ func main() {
 		defer cancel()
 		httpServer.Shutdown(shutdownCtx)
 	}()
-	log.Println("Healthcheck endpoints available:")
+	log.Println("Healthcheck and metrics endpoints available:")
 	log.Println("  - GET http://localhost:8080/health")
 	log.Println("  - GET http://localhost:8080/health/readiness")
 	log.Println("  - GET http://localhost:8080/health/liveness")
+	log.Println("  - GET http://localhost:8080/metrics")
 
 	// === ЗАПУСК ЗАВЕРШЕН ===
 	log.Println("Background Worker Service is running")
