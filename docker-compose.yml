@@ -197,12 +197,18 @@ services:
       JWT_SECRET: your-super-secret-jwt-key-change-in-production
       JWT_ACCESS_DURATION: 15m
       JWT_REFRESH_DURATION: 168h
+
+      # Logging config
+      LOG_LEVEL: info
+      LOGSTASH_ADDR: logstash:5000
     ports:
       - "8080:8080"
     depends_on:
       postgres-auth:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      logstash:
         condition: service_healthy
     networks:
       - backend_network
@@ -239,6 +245,10 @@ services:
 
       # JWT config (для проверки токенов)
       JWT_SECRET: your-super-secret-jwt-key-change-in-production
+
+      # Logging config
+      LOG_LEVEL: info
+      LOGSTASH_ADDR: logstash:5000
     ports:
       - "8081:8081"
     depends_on:
@@ -280,6 +290,10 @@ services:
 
       # Catalog Service URL для проверки цен товаров
       CATALOG_SERVICE_URL: http://catalog-service:8081
+
+      # Logging config
+      LOG_LEVEL: info
+      LOGSTASH_ADDR: logstash:5000
     ports:
       - "8082:8082"
     depends_on:
@@ -314,6 +328,10 @@ services:
 
       # JWT config (ОБЯЗАТЕЛЬНО совпадает с Auth Service!)
       JWT_SECRET: your-super-secret-jwt-key-change-in-production
+
+      # Logging config
+      LOG_LEVEL: info
+      LOGSTASH_ADDR: logstash:5000
     ports:
       - "8083:8083"
     depends_on:
@@ -370,6 +388,7 @@ services:
       # General settings
       TZ: UTC
       LOG_LEVEL: info
+      LOGSTASH_ADDR: logstash:5000
 
     ports:
       - "8085:8080"  # Healthcheck HTTP endpoint
@@ -484,6 +503,87 @@ services:
       - backend_network
     restart: unless-stopped
 
+  # ==================== ELK STACK ====================
+
+  # Elasticsearch - хранение и поиск логов
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.0
+    container_name: augustberries-elasticsearch
+    environment:
+      - node.name=elasticsearch
+      - cluster.name=augustberries-cluster
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - xpack.security.enabled=false
+      - xpack.security.enrollment.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    networks:
+      - backend_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # Logstash - сбор и обработка логов
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.12.0
+    container_name: augustberries-logstash
+    volumes:
+      - ./monitoring/elk/logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+      - ./monitoring/elk/logstash/config/pipelines.yml:/usr/share/logstash/config/pipelines.yml:ro
+      - ./monitoring/elk/logstash/pipeline:/usr/share/logstash/pipeline:ro
+    ports:
+      - "5000:5000/tcp"
+      - "5000:5000/udp"
+      - "5044:5044"
+      - "9600:9600"
+    environment:
+      LS_JAVA_OPTS: "-Xms256m -Xmx256m"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - backend_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9600/_node/stats || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # Kibana - визуализация логов
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.12.0
+    container_name: augustberries-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - SERVER_NAME=kibana
+      - XPACK_SECURITY_ENABLED=false
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - backend_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5601/api/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
 # ==================== NETWORKS ====================
 
 networks:
@@ -501,3 +601,4 @@ volumes:
   redis-data:
   prometheus-data:
   grafana-data:
+  elasticsearch-data:

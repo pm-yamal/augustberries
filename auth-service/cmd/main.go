@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -18,63 +17,74 @@ import (
 	"augustberries/auth-service/internal/app/auth/repository"
 	"augustberries/auth-service/internal/app/auth/service"
 	"augustberries/auth-service/internal/app/auth/util"
+	"augustberries/pkg/logger"
 )
 
 func main() {
-	// Загружаем конфигурацию
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		fmt.Printf("Failed to load config: %v\n", err)
+		os.Exit(1)
 	}
 
-	// Подключаемся к базе данных PostgreSQL
+	logLevel := os.Getenv("LOG_LEVEL")
+	if logLevel == "" {
+		logLevel = "info"
+	}
+	logger.Init("auth-service", logLevel)
+
+	logstashAddr := os.Getenv("LOGSTASH_ADDR")
+	if logstashAddr != "" {
+		if err := logger.InitLogstash(logstashAddr, "auth-service", logLevel); err != nil {
+			logger.Warn().Err(err).Msg("Failed to connect to Logstash, using stdout only")
+		} else {
+			logger.Info().Str("logstash_addr", logstashAddr).Msg("Connected to Logstash")
+		}
+	}
+
 	db, err := connectDB(context.Background(), cfg.Database)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		logger.Fatal().Err(err).Msg("Failed to connect to database")
 	}
 	defer db.Close()
 
-	log.Println("Successfully connected to PostgreSQL database")
+	logger.Info().
+		Str("host", cfg.Database.Host).
+		Str("database", cfg.Database.DBName).
+		Msg("Connected to PostgreSQL")
 
-	// Подключаемся к Redis
 	redisClient := connectRedis(cfg.Redis)
 	defer redisClient.Close()
 
-	// Проверяем соединение с Redis
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := redisClient.Ping(ctx).Err(); err != nil {
-		log.Fatalf("Failed to connect to Redis: %v", err)
+		logger.Fatal().Err(err).Msg("Failed to connect to Redis")
 	}
 
-	log.Println("Successfully connected to Redis")
+	logger.Info().
+		Str("host", cfg.Redis.Host).
+		Int("db", cfg.Redis.DB).
+		Msg("Connected to Redis")
 
-	// Инициализируем JWT менеджер
 	jwtManager := util.NewJWTManager(
 		cfg.JWT.SecretKey,
 		cfg.JWT.AccessTokenDuration,
 		cfg.JWT.RefreshTokenDuration,
 	)
 
-	// Инициализируем репозитории
 	userRepo := repository.NewUserRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
-
-	// Используем Redis для хранения токенов вместо PostgreSQL
 	tokenRepo := repository.NewRedisTokenRepository(redisClient)
 
-	// Инициализируем сервисы
 	authService := service.NewAuthService(userRepo, roleRepo, tokenRepo, jwtManager)
 
-	// Инициализируем обработчики
 	authHandler := handler.NewAuthHandler(authService)
 	authMiddleware := handler.NewAuthMiddleware(authService)
 
-	// Настраиваем маршруты с Gin router
 	router := handler.SetupRoutes(authHandler, authMiddleware)
 
-	// Создаем HTTP сервер
 	server := &http.Server{
 		Addr:         cfg.Server.Address(),
 		Handler:      router,
@@ -83,65 +93,61 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Запускаем сервер в отдельной горутине
 	go func() {
-		log.Printf("Starting server on %s", cfg.Server.Address())
+		logger.Info().
+			Str("address", cfg.Server.Address()).
+			Msg("Starting Auth Service")
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Failed to start server: %v", err)
+			logger.Fatal().Err(err).Msg("Failed to start server")
 		}
 	}()
 
-	// Ожидаем сигнала завершения (graceful shutdown)
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Shutting down server...")
+	logger.Info().Msg("Shutting down server...")
 
-	// Даем серверу 30 секунд на завершение текущих запросов
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+		logger.Fatal().Err(err).Msg("Server forced to shutdown")
 	}
 
-	log.Println("Server stopped gracefully")
+	logger.Info().Msg("Server stopped gracefully")
 }
 
-// connectDB устанавливает соединение с PostgreSQL используя pgx connection pool
 func connectDB(ctx context.Context, cfg config.DatabaseConfig) (*pgxpool.Pool, error) {
-	// Формируем connection string для pgx
 	connString := fmt.Sprintf(
 		"postgres://%s:%s@%s:%s/%s?sslmode=%s",
 		cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.DBName, cfg.SSLMode,
 	)
 
-	// Настройка пула соединений
 	poolConfig, err := pgxpool.ParseConfig(connString)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse pool config: %w", err)
 	}
 
-	// Оптимальные настройки пула для production
-	poolConfig.MaxConns = 25                     // Максимум соединений
-	poolConfig.MinConns = 5                      // Минимум соединений
-	poolConfig.MaxConnLifetime = 5 * time.Minute // Время жизни соединения
-	poolConfig.MaxConnIdleTime = 1 * time.Minute // Время бездействия до закрытия
+	poolConfig.MaxConns = 25
+	poolConfig.MinConns = 5
+	poolConfig.MaxConnLifetime = 5 * time.Minute
+	poolConfig.MaxConnIdleTime = 1 * time.Minute
 	poolConfig.HealthCheckPeriod = 1 * time.Minute
 
-	// Пробуем подключиться с повторными попытками
 	var pool *pgxpool.Pool
 	for i := 0; i < 10; i++ {
 		pool, err = pgxpool.NewWithConfig(ctx, poolConfig)
 		if err == nil {
-			// Проверяем соединение
 			if err = pool.Ping(ctx); err == nil {
 				break
 			}
 			pool.Close()
 		}
-		log.Printf("Failed to connect to database (attempt %d/10): %v", i+1, err)
+		logger.Warn().
+			Int("attempt", i+1).
+			Err(err).
+			Msg("Failed to connect to database, retrying...")
 		time.Sleep(3 * time.Second)
 	}
 
@@ -152,7 +158,6 @@ func connectDB(ctx context.Context, cfg config.DatabaseConfig) (*pgxpool.Pool, e
 	return pool, nil
 }
 
-// connectRedis создает и настраивает Redis клиент
 func connectRedis(cfg config.RedisConfig) *redis.Client {
 	client := redis.NewClient(&redis.Options{
 		Addr:         cfg.Address(),
