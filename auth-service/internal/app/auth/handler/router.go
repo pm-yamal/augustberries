@@ -7,12 +7,19 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"augustberries/pkg/logger"
 	"augustberries/pkg/metrics"
 )
 
 // SetupRoutes настраивает все маршруты приложения с использованием Gin
 func SetupRoutes(authHandler *AuthHandler, authMiddleware *AuthMiddleware) *gin.Engine {
-	router := gin.Default()
+	router := gin.New()
+
+	// Recovery middleware для обработки panic
+	router.Use(gin.Recovery())
+
+	// JSON logging middleware для HTTP-запросов (ELK Stack)
+	router.Use(logger.GinLoggerMiddleware())
 
 	// Prometheus metrics middleware
 	router.Use(metrics.GinPrometheusMiddleware("auth-service"))

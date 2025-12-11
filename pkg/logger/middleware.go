@@ -75,7 +75,7 @@ func HTTPMiddleware(next http.Handler) http.Handler {
 			Str("user_agent", r.UserAgent()).
 			Int("status", wrapped.status).
 			Int("size", wrapped.size).
-			Dur("duration_ms", duration).
+			Float64("duration_ms", float64(duration.Milliseconds())).
 			Msg("HTTP request")
 	})
 }
