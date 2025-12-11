@@ -1,0 +1,21 @@
+{
+  "version": "8.12.0",
+  "objects": [
+    {
+      "id": "augustberries-logs-*",
+      "type": "index-pattern",
+      "attributes": {
+        "title": "augustberries-logs-*",
+        "timeFieldName": "@timestamp"
+      }
+    },
+    {
+      "id": "augustberries-errors-*",
+      "type": "index-pattern",
+      "attributes": {
+        "title": "augustberries-errors-*",
+        "timeFieldName": "@timestamp"
+      }
+    }
+  ]
+}
