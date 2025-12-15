@@ -11,30 +11,22 @@ import (
 	"augustberries/pkg/metrics"
 )
 
-// SetupRoutes настраивает все маршруты приложения с использованием Gin
-func SetupRoutes(authHandler *AuthHandler, authMiddleware *AuthMiddleware) *gin.Engine {
+func SetupRoutes(authHandler *AuthHandler, roleHandler *RoleHandler, authMiddleware *AuthMiddleware) *gin.Engine {
 	router := gin.New()
 
-	// Recovery middleware для обработки panic
 	router.Use(gin.Recovery())
-
-	// JSON logging middleware для HTTP-запросов (ELK Stack)
 	router.Use(logger.GinLoggerMiddleware())
-
-	// Prometheus metrics middleware
 	router.Use(metrics.GinPrometheusMiddleware("auth-service"))
 
-	// CORS настройки
 	router.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"https://*", "http://*"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
 		AllowHeaders:     []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposeHeaders:    []string{"Link"},
 		AllowCredentials: true,
 		MaxAge:           300,
 	}))
 
-	// Health check endpoint
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":  "ok",
@@ -42,10 +34,8 @@ func SetupRoutes(authHandler *AuthHandler, authMiddleware *AuthMiddleware) *gin.
 		})
 	})
 
-	// Prometheus metrics endpoint
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-	// Публичные эндпоинты (без аутентификации)
 	auth := router.Group("/auth")
 	{
 		auth.POST("/register", authHandler.Register)
@@ -53,7 +43,6 @@ func SetupRoutes(authHandler *AuthHandler, authMiddleware *AuthMiddleware) *gin.
 		auth.POST("/refresh", authHandler.RefreshToken)
 		auth.POST("/validate", authHandler.ValidateToken)
 
-		// Защищенные эндпоинты (требуют аутентификации)
 		protected := auth.Group("")
 		protected.Use(authMiddleware.Authenticate())
 		{
@@ -62,7 +51,6 @@ func SetupRoutes(authHandler *AuthHandler, authMiddleware *AuthMiddleware) *gin.
 		}
 	}
 
-	// Admin эндпоинты - только для администраторов
 	admin := router.Group("/admin")
 	admin.Use(authMiddleware.Authenticate())
 	admin.Use(authMiddleware.RequireRole("admin"))
@@ -72,20 +60,36 @@ func SetupRoutes(authHandler *AuthHandler, authMiddleware *AuthMiddleware) *gin.
 				"message": "Admin only endpoint - list users",
 			})
 		})
+
+		roles := admin.Group("/roles")
+		{
+			roles.GET("", roleHandler.ListRoles)
+			roles.GET("/:id", roleHandler.GetRole)
+			roles.POST("", roleHandler.CreateRole)
+			roles.PUT("/:id", roleHandler.UpdateRole)
+			roles.DELETE("/:id", roleHandler.DeleteRole)
+			roles.GET("/:id/permissions", roleHandler.GetRolePermissions)
+			roles.POST("/:id/permissions", roleHandler.AssignPermissions)
+			roles.DELETE("/:id/permissions", roleHandler.RemovePermissions)
+		}
+
+		permissions := admin.Group("/permissions")
+		{
+			permissions.GET("", roleHandler.ListPermissions)
+			permissions.POST("", roleHandler.CreatePermission)
+			permissions.DELETE("/:id", roleHandler.DeletePermission)
+		}
 	}
 
-	// API эндпоинты с проверкой разрешений
 	api := router.Group("/api/products")
 	api.Use(authMiddleware.Authenticate())
 	{
-		// Любой авторизованный пользователь может читать
 		api.GET("", func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{
 				"message": "List products",
 			})
 		})
 
-		// Только с разрешением product.create
 		api.POST("", authMiddleware.RequirePermission("product.create"), func(c *gin.Context) {
 			c.JSON(http.StatusCreated, gin.H{
 				"message": "Product created",

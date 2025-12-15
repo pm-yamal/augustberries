@@ -79,11 +79,14 @@ func main() {
 	tokenRepo := repository.NewRedisTokenRepository(redisClient)
 
 	authService := service.NewAuthService(userRepo, roleRepo, tokenRepo, jwtManager)
+	roleService := service.NewRoleService(roleRepo)
+	permissionService := service.NewPermissionService(roleRepo)
 
 	authHandler := handler.NewAuthHandler(authService)
+	roleHandler := handler.NewRoleHandler(roleService, permissionService)
 	authMiddleware := handler.NewAuthMiddleware(authService)
 
-	router := handler.SetupRoutes(authHandler, authMiddleware)
+	router := handler.SetupRoutes(authHandler, roleHandler, authMiddleware)
 
 	server := &http.Server{
 		Addr:         cfg.Server.Address(),

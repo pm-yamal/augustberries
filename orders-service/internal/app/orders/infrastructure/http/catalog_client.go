@@ -73,12 +73,9 @@ func (c *CatalogClient) GetProduct(ctx context.Context, productID uuid.UUID) (*e
 }
 
 // GetProducts получает информацию о нескольких товарах
-// Можно использовать для оптимизации запросов при создании заказа с несколькими позициями
 func (c *CatalogClient) GetProducts(ctx context.Context, productIDs []uuid.UUID) (map[uuid.UUID]*entity.ProductWithCategory, error) {
 	products := make(map[uuid.UUID]*entity.ProductWithCategory)
 
-	// В реальном проекте здесь можно сделать batch запрос к Catalog Service
-	// Но так как в API нет batch endpoint, делаем последовательные запросы
 	for _, productID := range productIDs {
 		product, err := c.GetProduct(ctx, productID)
 		if err != nil {
