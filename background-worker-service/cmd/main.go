@@ -3,78 +3,70 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/redis/go-redis/v9"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
-
 	"augustberries/background-worker-service/internal/app/background-worker/config"
 	"augustberries/background-worker-service/internal/app/background-worker/handler"
 	"augustberries/background-worker-service/internal/app/background-worker/processor"
 	"augustberries/background-worker-service/internal/app/background-worker/repository"
 	"augustberries/background-worker-service/internal/app/background-worker/service"
-	"augustberries/pkg/logger"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/redis/go-redis/v9"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 func main() {
-	logLevel := os.Getenv("LOG_LEVEL")
-	if logLevel == "" {
-		logLevel = "info"
-	}
-	logger.Init("background-worker-service", logLevel)
+	log.Println("Starting Background Worker Service...")
 
-	logstashAddr := os.Getenv("LOGSTASH_ADDR")
-	if logstashAddr != "" {
-		if err := logger.InitLogstash(logstashAddr, "background-worker-service", logLevel); err != nil {
-			logger.Warn().Err(err).Msg("Failed to connect to Logstash, using stdout only")
-		} else {
-			logger.Info().Str("logstash_addr", logstashAddr).Msg("Connected to Logstash")
-		}
-	}
-
-	logger.Info().Msg("Starting Background Worker Service...")
-
+	// === ИНИЦИАЛИЗАЦИЯ КОНФИГУРАЦИИ ===
 	cfg, err := config.Load()
 	if err != nil {
-		logger.Fatal().Err(err).Msg("Failed to load config")
+		log.Fatalf("Failed to load config: %v", err)
 	}
 
+	// Создаем основной контекст приложения
 	ctx := context.Background()
 
+	// === ПОДКЛЮЧЕНИЕ К POSTGRESQL ===
+	// Используем БД Orders Service для обновления заказов
 	db, err := connectDB(cfg.Database)
 	if err != nil {
-		logger.Fatal().Err(err).Msg("Failed to connect to database")
+		log.Fatalf("Failed to connect to database: %v", err)
 	}
-	logger.Info().
-		Str("host", cfg.Database.Host).
-		Str("database", cfg.Database.DBName).
-		Msg("Connected to PostgreSQL")
+	log.Println("Successfully connected to PostgreSQL (orders_service)")
 
+	// === ПОДКЛЮЧЕНИЕ К REDIS ===
+	// Redis используется для хранения курсов валют
 	redisClient, err := connectRedis(ctx, cfg.Redis)
 	if err != nil {
-		logger.Fatal().Err(err).Msg("Failed to connect to Redis")
+		log.Fatalf("Failed to connect to Redis: %v", err)
 	}
 	defer redisClient.Close()
-	logger.Info().
-		Str("host", cfg.Redis.Host).
-		Int("db", cfg.Redis.DB).
-		Msg("Connected to Redis")
+	log.Println("Successfully connected to Redis")
 
+	// === ИНИЦИАЛИЗАЦИЯ РЕПОЗИТОРИЕВ ===
 	orderRepo := repository.NewOrderRepository(db)
 	exchangeRateRepo := repository.NewExchangeRateRepository(redisClient, cfg.Redis.TTL)
+	log.Println("Repositories initialized")
 
+	// === ИНИЦИАЛИЗАЦИЯ API КЛИЕНТА ===
+	// API клиент для получения курсов валют из внешнего API
 	exchangeAPIClient := service.NewExchangeRateAPIClient(
 		cfg.ExchangeAPI.URL,
 		cfg.ExchangeAPI.Timeout,
 	)
+	log.Println("Exchange Rate API Client initialized")
 
+	// === ИНИЦИАЛИЗАЦИЯ СЕРВИСОВ ===
+	// Exchange Rate Service использует API клиент для получения данных
 	exchangeRateSvc := service.NewExchangeRateService(
 		exchangeRateRepo,
 		exchangeAPIClient,
@@ -84,7 +76,9 @@ func main() {
 		orderRepo,
 		exchangeRateSvc,
 	)
+	log.Println("Services initialized")
 
+	// === ИНИЦИАЛИЗАЦИЯ KAFKA CONSUMER ===
 	kafkaConsumer := processor.NewKafkaConsumer(
 		cfg.Kafka.Brokers,
 		cfg.Kafka.Topic,
@@ -95,27 +89,28 @@ func main() {
 		exchangeRateSvc,
 	)
 
+	// Запускаем Kafka consumer
 	kafkaConsumer.Start(ctx)
 	defer kafkaConsumer.Stop()
-	logger.Info().
-		Str("topic", cfg.Kafka.Topic).
-		Str("group_id", cfg.Kafka.GroupID).
-		Msg("Kafka consumer started")
+	log.Printf("Kafka consumer started (topic: %s, group: %s)", cfg.Kafka.Topic, cfg.Kafka.GroupID)
 
+	// === ИНИЦИАЛИЗАЦИЯ CRON SCHEDULER ===
 	cronScheduler := processor.NewCronScheduler(exchangeRateSvc)
 
+	// Запускаем cron для периодического обновления курсов валют
 	if err := cronScheduler.Start(ctx, cfg.CronSchedule.UpdateRates); err != nil {
-		logger.Fatal().Err(err).Msg("Failed to start cron scheduler")
+		log.Fatalf("Failed to start cron scheduler: %v", err)
 	}
 	defer cronScheduler.Stop()
-	logger.Info().
-		Str("schedule", cfg.CronSchedule.UpdateRates).
-		Msg("Cron scheduler started")
+	log.Printf("Cron scheduler started (schedule: %s)", cfg.CronSchedule.UpdateRates)
 
+	// === ИНИЦИАЛИЗАЦИЯ HEALTHCHECK HTTP СЕРВЕРА ===
 	healthHandler := handler.NewHealthCheckHandler(db, redisClient, exchangeRateSvc)
 
 	mux := http.NewServeMux()
 	healthHandler.RegisterRoutes(mux)
+
+	// Prometheus metrics endpoint
 	mux.Handle("/metrics", promhttp.Handler())
 
 	httpServer := &http.Server{
@@ -123,12 +118,11 @@ func main() {
 		Handler: mux,
 	}
 
+	// Запускаем HTTP сервер в отдельной горутине
 	go func() {
-		logger.Info().
-			Str("address", ":8080").
-			Msg("Starting healthcheck HTTP server")
+		log.Println("Starting healthcheck HTTP server on :8080...")
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Error().Err(err).Msg("HTTP server error")
+			log.Printf("HTTP server error: %v", err)
 		}
 	}()
 	defer func() {
@@ -136,23 +130,36 @@ func main() {
 		defer cancel()
 		httpServer.Shutdown(shutdownCtx)
 	}()
+	log.Println("Healthcheck and metrics endpoints available:")
+	log.Println("  - GET http://localhost:8080/health")
+	log.Println("  - GET http://localhost:8080/health/readiness")
+	log.Println("  - GET http://localhost:8080/health/liveness")
+	log.Println("  - GET http://localhost:8080/metrics")
 
-	logger.Info().Msg("Background Worker Service is running")
+	// === ЗАПУСК ЗАВЕРШЕН ===
+	log.Println("Background Worker Service is running")
+	log.Println("Waiting for ORDER_CREATED events from Kafka...")
+	log.Printf("Exchange rates will be updated according to schedule: %s", cfg.CronSchedule.UpdateRates)
 
+	// === GRACEFUL SHUTDOWN ===
+	// Ожидаем сигнала завершения (SIGINT или SIGTERM)
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	logger.Info().Msg("Shutting down Background Worker Service...")
+	log.Println("Shutting down Background Worker Service...")
 
+	// Даем время на завершение обработки текущих сообщений
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	// Ждем завершения обработки
 	<-shutdownCtx.Done()
 
-	logger.Info().Msg("Background Worker Service stopped gracefully")
+	log.Println("Background Worker Service stopped gracefully")
 }
 
+// connectDB устанавливает соединение с PostgreSQL используя GORM
 func connectDB(cfg config.DatabaseConfig) (*gorm.DB, error) {
 	dsn := fmt.Sprintf(
 		"host=%s user=%s password=%s dbname=%s port=%s sslmode=%s",
@@ -160,9 +167,10 @@ func connectDB(cfg config.DatabaseConfig) (*gorm.DB, error) {
 	)
 
 	gormConfig := &gorm.Config{
-		Logger: gormlogger.Default.LogMode(gormlogger.Info),
+		Logger: logger.Default.LogMode(logger.Info),
 	}
 
+	// Retry logic для устойчивости при запуске в Docker
 	var db *gorm.DB
 	var err error
 
@@ -176,6 +184,7 @@ func connectDB(cfg config.DatabaseConfig) (*gorm.DB, error) {
 				if pingErr := sqlDB.Ping(); pingErr != nil {
 					err = pingErr
 				} else {
+					// Настраиваем connection pool
 					sqlDB.SetMaxOpenConns(10)
 					sqlDB.SetMaxIdleConns(5)
 					sqlDB.SetConnMaxLifetime(5 * time.Minute)
@@ -184,16 +193,14 @@ func connectDB(cfg config.DatabaseConfig) (*gorm.DB, error) {
 				}
 			}
 		}
-		logger.Warn().
-			Int("attempt", i+1).
-			Err(err).
-			Msg("Failed to connect to database, retrying...")
+		log.Printf("Failed to connect to database (attempt %d/10): %v", i+1, err)
 		time.Sleep(3 * time.Second)
 	}
 
 	return nil, fmt.Errorf("failed to connect after 10 attempts: %w", err)
 }
 
+// connectRedis устанавливает соединение с Redis
 func connectRedis(ctx context.Context, cfg config.RedisConfig) (*redis.Client, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr:         cfg.Address(),
@@ -206,13 +213,12 @@ func connectRedis(ctx context.Context, cfg config.RedisConfig) (*redis.Client, e
 		MinIdleConns: 5,
 	})
 
+	// Проверяем соединение с retry logic
 	for i := 0; i < 10; i++ {
 		if err := client.Ping(ctx).Err(); err == nil {
 			return client, nil
 		}
-		logger.Warn().
-			Int("attempt", i+1).
-			Msg("Failed to connect to Redis, retrying...")
+		log.Printf("Failed to connect to Redis (attempt %d/10)", i+1)
 		time.Sleep(3 * time.Second)
 	}
 
