@@ -26,8 +26,6 @@ func NewCatalogHandler(catalogService *service.CatalogService) *CatalogHandler {
 	}
 }
 
-// === CATEGORIES HANDLERS ===
-
 // CreateCategory обрабатывает POST /categories
 func (h *CatalogHandler) CreateCategory(c *gin.Context) {
 	var req entity.CreateCategoryRequest
@@ -146,8 +144,6 @@ func (h *CatalogHandler) DeleteCategory(c *gin.Context) {
 		Message: "Category deleted successfully",
 	})
 }
-
-// === PRODUCTS HANDLERS ===
 
 // CreateProduct обрабатывает POST /products
 func (h *CatalogHandler) CreateProduct(c *gin.Context) {

@@ -621,9 +621,6 @@ func TestAuthHandler_ValidateToken_ExpiredToken(t *testing.T) {
 // ==================== Helper Function Tests ====================
 
 func TestFormatValidationErrors(t *testing.T) {
-	// Этот тест проверяет форматирование ошибок валидации
-	// Создаём невалидный запрос и проверяем формат ошибки
-
 	handler, _, _, _, _ := newTestAuthHandler()
 
 	reqBody := entity.RegisterRequest{
