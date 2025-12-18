@@ -15,7 +15,6 @@ import (
 )
 
 var (
-	// Стандартные ошибки репозитория для обработки в service layer
 	ErrReviewNotFound = errors.New("review not found")
 )
 
@@ -23,12 +22,9 @@ type reviewRepository struct {
 	collection *mongo.Collection
 }
 
-// NewReviewRepository создает новый репозиторий отзывов
-// Автоматически создает индекс по product_id для быстрой выборки
 func NewReviewRepository(db *mongo.Database) ReviewRepository {
 	collection := db.Collection("reviews")
 
-	// Создаем индекс по product_id для быстрого поиска отзывов по товару
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -41,11 +37,9 @@ func NewReviewRepository(db *mongo.Database) ReviewRepository {
 
 	_, err := collection.Indexes().CreateOne(ctx, indexModel)
 	if err != nil {
-		// Логируем ошибку, но не прерываем работу - индекс может уже существовать
 		fmt.Printf("Warning: failed to create index on product_id: %v\n", err)
 	}
 
-	// Создаем также индекс по user_id для поиска отзывов пользователя
 	userIndexModel := mongo.IndexModel{
 		Keys: bson.D{
 			{Key: "user_id", Value: 1},
@@ -63,7 +57,6 @@ func NewReviewRepository(db *mongo.Database) ReviewRepository {
 	}
 }
 
-// Create создает новый отзыв в MongoDB
 func (r *reviewRepository) Create(ctx context.Context, review *entity.Review) error {
 	review.CreatedAt = time.Now()
 	review.UpdatedAt = time.Now()
@@ -73,7 +66,6 @@ func (r *reviewRepository) Create(ctx context.Context, review *entity.Review) er
 		return fmt.Errorf("failed to create review: %w", err)
 	}
 
-	// Устанавливаем ID из результата вставки
 	if oid, ok := result.InsertedID.(primitive.ObjectID); ok {
 		review.ID = oid
 	}
@@ -81,8 +73,6 @@ func (r *reviewRepository) Create(ctx context.Context, review *entity.Review) er
 	return nil
 }
 
-// GetByProductID получает все отзывы по ID товара
-// Использует индекс product_id_idx для быстрой выборки
 func (r *reviewRepository) GetByProductID(ctx context.Context, productID string) ([]entity.Review, error) {
 	filter := bson.M{"product_id": productID}
 	opts := options.Find().SetSort(bson.D{{Key: "created_at", Value: -1}})
@@ -101,7 +91,6 @@ func (r *reviewRepository) GetByProductID(ctx context.Context, productID string)
 	return reviews, nil
 }
 
-// GetByID получает отзыв по ID
 func (r *reviewRepository) GetByID(ctx context.Context, id string) (*entity.Review, error) {
 	objectID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
@@ -122,7 +111,6 @@ func (r *reviewRepository) GetByID(ctx context.Context, id string) (*entity.Revi
 	return &review, nil
 }
 
-// Update обновляет отзыв в MongoDB
 func (r *reviewRepository) Update(ctx context.Context, review *entity.Review) error {
 	review.UpdatedAt = time.Now()
 
@@ -147,7 +135,6 @@ func (r *reviewRepository) Update(ctx context.Context, review *entity.Review) er
 	return nil
 }
 
-// Delete удаляет отзыв из MongoDB
 func (r *reviewRepository) Delete(ctx context.Context, id string) error {
 	objectID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
@@ -168,8 +155,6 @@ func (r *reviewRepository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// GetByUserID получает все отзывы пользователя
-// Использует индекс user_id_idx для быстрой выборки
 func (r *reviewRepository) GetByUserID(ctx context.Context, userID string) ([]entity.Review, error) {
 	filter := bson.M{"user_id": userID}
 	opts := options.Find().SetSort(bson.D{{Key: "created_at", Value: -1}})

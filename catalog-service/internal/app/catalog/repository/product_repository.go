@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"augustberries/catalog-service/internal/app/catalog/entity"
 
@@ -10,26 +11,19 @@ import (
 	"gorm.io/gorm"
 )
 
-var (
-	ErrProductNotFound = errors.New("product not found")
-)
-
 type productRepository struct {
 	db *gorm.DB
 }
 
-// NewProductRepository создает новый репозиторий товаров
 func NewProductRepository(db *gorm.DB) ProductRepository {
 	return &productRepository{db: db}
 }
 
-// Create создает новый товар
 func (r *productRepository) Create(ctx context.Context, product *entity.Product) error {
 	result := r.db.WithContext(ctx).Create(product)
-	return result.Error
+	return wrapGormError(result.Error)
 }
 
-// GetByID получает товар по ID
 func (r *productRepository) GetByID(ctx context.Context, id uuid.UUID) (*entity.Product, error) {
 	var product entity.Product
 	result := r.db.WithContext(ctx).First(&product, "id = ?", id)
@@ -38,25 +32,23 @@ func (r *productRepository) GetByID(ctx context.Context, id uuid.UUID) (*entity.
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return nil, ErrProductNotFound
 		}
-		return nil, result.Error
+		return nil, wrapGormError(result.Error)
 	}
 
 	return &product, nil
 }
 
-// GetAll получает все товары
 func (r *productRepository) GetAll(ctx context.Context) ([]entity.Product, error) {
 	var products []entity.Product
 	result := r.db.WithContext(ctx).Order("created_at DESC").Find(&products)
 
 	if result.Error != nil {
-		return nil, result.Error
+		return nil, wrapGormError(result.Error)
 	}
 
 	return products, nil
 }
 
-// GetWithCategory получает товар с информацией о категории
 func (r *productRepository) GetWithCategory(ctx context.Context, id uuid.UUID) (*entity.ProductWithCategory, error) {
 	var product entity.Product
 	result := r.db.WithContext(ctx).Preload("Category").First(&product, "id = ?", id)
@@ -65,10 +57,9 @@ func (r *productRepository) GetWithCategory(ctx context.Context, id uuid.UUID) (
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return nil, ErrProductNotFound
 		}
-		return nil, result.Error
+		return nil, wrapGormError(result.Error)
 	}
 
-	// Создаем ProductWithCategory из product
 	pwc := &entity.ProductWithCategory{
 		Product: product,
 	}
@@ -79,16 +70,14 @@ func (r *productRepository) GetWithCategory(ctx context.Context, id uuid.UUID) (
 	return pwc, nil
 }
 
-// GetAllWithCategories получает все товары с информацией о категориях
 func (r *productRepository) GetAllWithCategories(ctx context.Context) ([]entity.ProductWithCategory, error) {
 	var products []entity.Product
 	result := r.db.WithContext(ctx).Preload("Category").Order("created_at DESC").Find(&products)
 
 	if result.Error != nil {
-		return nil, result.Error
+		return nil, wrapGormError(result.Error)
 	}
 
-	// Преобразуем в ProductWithCategory
 	var productsWithCat []entity.ProductWithCategory
 	for _, p := range products {
 		pwc := entity.ProductWithCategory{
@@ -103,7 +92,6 @@ func (r *productRepository) GetAllWithCategories(ctx context.Context) ([]entity.
 	return productsWithCat, nil
 }
 
-// Update обновляет товар
 func (r *productRepository) Update(ctx context.Context, product *entity.Product) error {
 	result := r.db.WithContext(ctx).Model(product).Where("id = ?", product.ID).Updates(map[string]interface{}{
 		"name":        product.Name,
@@ -113,7 +101,7 @@ func (r *productRepository) Update(ctx context.Context, product *entity.Product)
 	})
 
 	if result.Error != nil {
-		return result.Error
+		return wrapGormError(result.Error)
 	}
 
 	if result.RowsAffected == 0 {
@@ -123,12 +111,11 @@ func (r *productRepository) Update(ctx context.Context, product *entity.Product)
 	return nil
 }
 
-// Delete удаляет товар
 func (r *productRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	result := r.db.WithContext(ctx).Delete(&entity.Product{}, "id = ?", id)
 
 	if result.Error != nil {
-		return result.Error
+		return wrapGormError(result.Error)
 	}
 
 	if result.RowsAffected == 0 {
@@ -136,4 +123,24 @@ func (r *productRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	}
 
 	return nil
+}
+
+func wrapGormError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return ErrNotFound
+	}
+
+	errStr := err.Error()
+	if strings.Contains(errStr, "duplicate key") || strings.Contains(errStr, "unique constraint") {
+		return ErrDuplicateKey
+	}
+	if strings.Contains(errStr, "foreign key") || strings.Contains(errStr, "violates foreign key") {
+		return ErrForeignKey
+	}
+
+	return err
 }

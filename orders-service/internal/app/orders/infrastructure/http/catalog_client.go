@@ -12,15 +12,12 @@ import (
 	"github.com/google/uuid"
 )
 
-// CatalogClient клиент для взаимодействия с Catalog Service
-// Используется для проверки цен товаров при создании заказа
 type CatalogClient struct {
 	baseURL    string
 	httpClient *http.Client
 	authToken  string // JWT токен для аутентификации в Catalog Service
 }
 
-// NewCatalogClient создает новый клиент для Catalog Service
 func NewCatalogClient(baseURL string) *CatalogClient {
 	return &CatalogClient{
 		baseURL: baseURL,
@@ -30,13 +27,10 @@ func NewCatalogClient(baseURL string) *CatalogClient {
 	}
 }
 
-// SetAuthToken устанавливает JWT токен для аутентификации
 func (c *CatalogClient) SetAuthToken(token string) {
 	c.authToken = token
 }
 
-// GetProduct получает информацию о товаре из Catalog Service
-// Используется для проверки актуальности цены при создании заказа
 func (c *CatalogClient) GetProduct(ctx context.Context, productID uuid.UUID) (*entity.ProductWithCategory, error) {
 	url := fmt.Sprintf("%s/products/%s", c.baseURL, productID.String())
 
@@ -45,7 +39,6 @@ func (c *CatalogClient) GetProduct(ctx context.Context, productID uuid.UUID) (*e
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Добавляем JWT токен для аутентификации
 	if c.authToken != "" {
 		req.Header.Set("Authorization", "Bearer "+c.authToken)
 	}
@@ -72,13 +65,9 @@ func (c *CatalogClient) GetProduct(ctx context.Context, productID uuid.UUID) (*e
 	return &product, nil
 }
 
-// GetProducts получает информацию о нескольких товарах
-// Можно использовать для оптимизации запросов при создании заказа с несколькими позициями
 func (c *CatalogClient) GetProducts(ctx context.Context, productIDs []uuid.UUID) (map[uuid.UUID]*entity.ProductWithCategory, error) {
 	products := make(map[uuid.UUID]*entity.ProductWithCategory)
 
-	// В реальном проекте здесь можно сделать batch запрос к Catalog Service
-	// Но так как в API нет batch endpoint, делаем последовательные запросы
 	for _, productID := range productIDs {
 		product, err := c.GetProduct(ctx, productID)
 		if err != nil {

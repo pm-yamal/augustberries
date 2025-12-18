@@ -2,11 +2,16 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"augustberries/auth-service/internal/app/auth/entity"
 
 	"github.com/google/uuid"
+)
+
+var (
+	ErrNotFound = errors.New("not found")
 )
 
 type UserRepository interface {

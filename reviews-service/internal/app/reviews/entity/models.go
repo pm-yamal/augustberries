@@ -6,7 +6,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-// Review представляет отзыв на товар в системе
 type Review struct {
 	ID        primitive.ObjectID `json:"id" bson:"_id,omitempty"`
 	ProductID string             `json:"product_id" bson:"product_id"` // UUID товара из Catalog Service
@@ -17,7 +16,6 @@ type Review struct {
 	UpdatedAt time.Time          `json:"updated_at" bson:"updated_at"`
 }
 
-// ReviewEvent представляет событие создания отзыва для Kafka
 type ReviewEvent struct {
 	EventType string    `json:"event_type"` // REVIEW_CREATED
 	ReviewID  string    `json:"review_id"`

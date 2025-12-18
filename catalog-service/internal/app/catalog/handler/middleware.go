@@ -8,7 +8,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// JWTClaims структура claims для JWT токена
 type JWTClaims struct {
 	UserID      string   `json:"user_id"`
 	Email       string   `json:"email"`
@@ -18,22 +17,18 @@ type JWTClaims struct {
 	jwt.RegisteredClaims
 }
 
-// AuthMiddleware проверяет JWT токен в запросах для Gin
 type AuthMiddleware struct {
 	jwtSecret string
 }
 
-// NewAuthMiddleware создает новый middleware для аутентификации
 func NewAuthMiddleware(jwtSecret string) *AuthMiddleware {
 	return &AuthMiddleware{
 		jwtSecret: jwtSecret,
 	}
 }
 
-// Authenticate проверяет JWT токен и добавляет данные пользователя в контекст Gin
 func (m *AuthMiddleware) Authenticate() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Извлекаем токен из заголовка Authorization
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header required"})
@@ -41,7 +36,6 @@ func (m *AuthMiddleware) Authenticate() gin.HandlerFunc {
 			return
 		}
 
-		// Проверяем формат "Bearer <token>"
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid authorization header format"})
@@ -51,7 +45,6 @@ func (m *AuthMiddleware) Authenticate() gin.HandlerFunc {
 
 		tokenString := parts[1]
 
-		// Парсим и валидируем токен
 		token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
 			return []byte(m.jwtSecret), nil
 		})
@@ -62,7 +55,6 @@ func (m *AuthMiddleware) Authenticate() gin.HandlerFunc {
 			return
 		}
 
-		// Извлекаем claims
 		claims, ok := token.Claims.(*JWTClaims)
 		if !ok {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token claims"})
@@ -70,19 +62,16 @@ func (m *AuthMiddleware) Authenticate() gin.HandlerFunc {
 			return
 		}
 
-		// Добавляем данные пользователя в контекст Gin
 		c.Set("user_id", claims.UserID)
 		c.Set("email", claims.Email)
 		c.Set("role_id", claims.RoleID)
 		c.Set("role_name", claims.RoleName)
 		c.Set("permissions", claims.Permissions)
 
-		// Передаем управление следующему обработчику
 		c.Next()
 	}
 }
 
-// RequireRole проверяет, что у пользователя есть требуемая роль
 func (m *AuthMiddleware) RequireRole(roles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		roleName, exists := c.Get("role_name")
@@ -99,7 +88,6 @@ func (m *AuthMiddleware) RequireRole(roles ...string) gin.HandlerFunc {
 			return
 		}
 
-		// Проверяем, есть ли роль пользователя в списке разрешенных
 		hasRole := false
 		for _, role := range roles {
 			if roleNameStr == role {
@@ -118,7 +106,6 @@ func (m *AuthMiddleware) RequireRole(roles ...string) gin.HandlerFunc {
 	}
 }
 
-// RequirePermission проверяет, что у пользователя есть требуемое разрешение
 func (m *AuthMiddleware) RequirePermission(permission string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		perms, exists := c.Get("permissions")
@@ -135,7 +122,6 @@ func (m *AuthMiddleware) RequirePermission(permission string) gin.HandlerFunc {
 			return
 		}
 
-		// Проверяем, есть ли требуемое разрешение
 		hasPermission := false
 		for _, p := range permissions {
 			if p == permission {

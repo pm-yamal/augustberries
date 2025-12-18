@@ -2,13 +2,18 @@ package repository
 
 import (
 	"context"
+	"errors"
 
 	"augustberries/orders-service/internal/app/orders/entity"
 
 	"github.com/google/uuid"
 )
 
-// OrderRepository определяет методы для работы с заказами
+var (
+	ErrNotFound      = errors.New("not found")
+	ErrOrderNotFound = errors.New("order not found")
+)
+
 type OrderRepository interface {
 	Create(ctx context.Context, order *entity.Order) error
 	GetByID(ctx context.Context, id uuid.UUID) (*entity.Order, error)
@@ -18,7 +23,6 @@ type OrderRepository interface {
 	GetWithItems(ctx context.Context, id uuid.UUID) (*entity.OrderWithItems, error)
 }
 
-// OrderItemRepository определяет методы для работы с позициями заказов
 type OrderItemRepository interface {
 	Create(ctx context.Context, item *entity.OrderItem) error
 	GetByOrderID(ctx context.Context, orderID uuid.UUID) ([]entity.OrderItem, error)

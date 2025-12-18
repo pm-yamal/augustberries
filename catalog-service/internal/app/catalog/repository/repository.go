@@ -2,13 +2,21 @@ package repository
 
 import (
 	"context"
+	"errors"
 
 	"augustberries/catalog-service/internal/app/catalog/entity"
 
 	"github.com/google/uuid"
 )
 
-// CategoryRepository определяет методы для работы с категориями
+var (
+	ErrNotFound         = errors.New("not found")
+	ErrCategoryNotFound = errors.New("category not found")
+	ErrProductNotFound  = errors.New("product not found")
+	ErrDuplicateKey     = errors.New("duplicate key")
+	ErrForeignKey       = errors.New("foreign key violation")
+)
+
 type CategoryRepository interface {
 	Create(ctx context.Context, category *entity.Category) error
 	GetByID(ctx context.Context, id uuid.UUID) (*entity.Category, error)
@@ -17,7 +25,6 @@ type CategoryRepository interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 }
 
-// ProductRepository определяет методы для работы с товарами
 type ProductRepository interface {
 	Create(ctx context.Context, product *entity.Product) error
 	GetByID(ctx context.Context, id uuid.UUID) (*entity.Product, error)

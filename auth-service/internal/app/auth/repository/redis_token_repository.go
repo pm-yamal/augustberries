@@ -141,7 +141,6 @@ func (r *redisTokenRepository) IsBlacklisted(ctx context.Context, token string) 
 	return exists > 0, nil
 }
 
-// CleanupExpiredTokens не требуется для Redis - TTL автоматически удаляет истекшие ключи
 func (r *redisTokenRepository) CleanupExpiredTokens(ctx context.Context) error {
 	return nil
 }

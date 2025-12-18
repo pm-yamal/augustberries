@@ -12,12 +12,14 @@ import (
 	"augustberries/catalog-service/internal/app/catalog/util"
 	"augustberries/pkg/metrics"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 )
 
 var (
 	ErrCategoryNotFound = errors.New("category not found")
 	ErrProductNotFound  = errors.New("product not found")
+	ErrValidation       = errors.New("validation error")
 )
 
 type CatalogService struct {
@@ -25,6 +27,7 @@ type CatalogService struct {
 	productRepo   repository.ProductRepository
 	redisClient   util.RedisCache
 	kafkaProducer util.MessagePublisher
+	validator     *validator.Validate
 }
 
 func NewCatalogService(
@@ -38,10 +41,15 @@ func NewCatalogService(
 		productRepo:   productRepo,
 		redisClient:   redisClient,
 		kafkaProducer: kafkaProducer,
+		validator:     validator.New(),
 	}
 }
 
 func (s *CatalogService) CreateCategory(ctx context.Context, req *entity.CreateCategoryRequest) (*entity.Category, error) {
+	if err := s.validator.Struct(req); err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrValidation, formatValidationError(err))
+	}
+
 	category := &entity.Category{
 		ID:        uuid.New(),
 		Name:      req.Name,
@@ -171,7 +179,6 @@ func (s *CatalogService) GetAllProducts(ctx context.Context) ([]entity.ProductWi
 	return products, nil
 }
 
-// UpdateProduct обновляет товар и отправляет событие PRODUCT_UPDATED в Kafka при изменении цены
 func (s *CatalogService) UpdateProduct(ctx context.Context, id uuid.UUID, req *entity.UpdateProductRequest) (*entity.Product, error) {
 	product, err := s.productRepo.GetByID(ctx, id)
 	if err != nil {
@@ -250,4 +257,20 @@ func (s *CatalogService) publishProductEvent(ctx context.Context, event entity.P
 	}
 
 	return nil
+}
+
+func formatValidationError(err error) string {
+	if validationErrors, ok := err.(validator.ValidationErrors); ok {
+		for _, e := range validationErrors {
+			switch e.Tag() {
+			case "required":
+				return e.Field() + " is required"
+			case "min":
+				return e.Field() + " must be at least " + e.Param() + " characters"
+			case "gt":
+				return e.Field() + " must be greater than " + e.Param()
+			}
+		}
+	}
+	return err.Error()
 }

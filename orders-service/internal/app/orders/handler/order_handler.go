@@ -12,24 +12,19 @@ import (
 	"github.com/google/uuid"
 )
 
-// OrderHandler обрабатывает HTTP запросы для заказов с использованием Gin
 type OrderHandler struct {
-	orderService *service.OrderService
+	orderService service.OrderServiceInterface
 	validator    *validator.Validate
 }
 
-// NewOrderHandler создает новый обработчик заказов
-func NewOrderHandler(orderService *service.OrderService) *OrderHandler {
+func NewOrderHandler(orderService service.OrderServiceInterface) *OrderHandler {
 	return &OrderHandler{
 		orderService: orderService,
 		validator:    validator.New(),
 	}
 }
 
-// CreateOrder обрабатывает POST /orders/
-// Создает новый заказ с проверкой цен из Catalog Service
 func (h *OrderHandler) CreateOrder(c *gin.Context) {
-	// Получаем userID из контекста (установлен middleware)
 	userID, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
@@ -42,7 +37,6 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 		return
 	}
 
-	// Получаем auth токен для запросов к Catalog Service
 	authToken, _ := c.Get("auth_token")
 	authTokenStr, _ := authToken.(string)
 
@@ -52,13 +46,11 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 		return
 	}
 
-	// Валидация
 	if err := h.validator.Struct(req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": formatValidationError(err)})
 		return
 	}
 
-	// Создаем заказ
 	order, err := h.orderService.CreateOrder(c.Request.Context(), userUUID, &req, authTokenStr)
 	if err != nil {
 		if errors.Is(err, service.ErrProductNotFound) {
@@ -69,15 +61,11 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 		return
 	}
 
-	// Формируем ответ
 	response := buildOrderResponse(order)
 	c.JSON(http.StatusCreated, response)
 }
 
-// GetOrder обрабатывает GET /orders/{id}
-// Получает заказ по ID с проверкой прав доступа
 func (h *OrderHandler) GetOrder(c *gin.Context) {
-	// Получаем userID из контекста
 	userID, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
@@ -90,7 +78,6 @@ func (h *OrderHandler) GetOrder(c *gin.Context) {
 		return
 	}
 
-	// Парсим orderID из URL
 	orderIDStr := c.Param("id")
 	orderID, err := uuid.Parse(orderIDStr)
 	if err != nil {
@@ -98,7 +85,6 @@ func (h *OrderHandler) GetOrder(c *gin.Context) {
 		return
 	}
 
-	// Получаем заказ
 	order, err := h.orderService.GetOrder(c.Request.Context(), orderID, userUUID)
 	if err != nil {
 		if errors.Is(err, service.ErrOrderNotFound) {
@@ -113,15 +99,11 @@ func (h *OrderHandler) GetOrder(c *gin.Context) {
 		return
 	}
 
-	// Формируем ответ
 	response := buildOrderResponse(order)
 	c.JSON(http.StatusOK, response)
 }
 
-// UpdateOrderStatus обрабатывает PATCH /orders/{id}
-// Обновляет статус заказа (shipped, delivered)
 func (h *OrderHandler) UpdateOrderStatus(c *gin.Context) {
-	// Получаем userID из контекста
 	userID, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
@@ -134,7 +116,6 @@ func (h *OrderHandler) UpdateOrderStatus(c *gin.Context) {
 		return
 	}
 
-	// Парсим orderID из URL
 	orderIDStr := c.Param("id")
 	orderID, err := uuid.Parse(orderIDStr)
 	if err != nil {
@@ -148,13 +129,11 @@ func (h *OrderHandler) UpdateOrderStatus(c *gin.Context) {
 		return
 	}
 
-	// Валидация
 	if err := h.validator.Struct(req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": formatValidationError(err)})
 		return
 	}
 
-	// Обновляем статус
 	order, err := h.orderService.UpdateOrderStatus(c.Request.Context(), orderID, userUUID, req.Status)
 	if err != nil {
 		if errors.Is(err, service.ErrOrderNotFound) {
@@ -179,10 +158,7 @@ func (h *OrderHandler) UpdateOrderStatus(c *gin.Context) {
 	})
 }
 
-// DeleteOrder обрабатывает DELETE /orders/{id}
-// Удаляет заказ с проверкой прав доступа
 func (h *OrderHandler) DeleteOrder(c *gin.Context) {
-	// Получаем userID из контекста
 	userID, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
@@ -195,7 +171,6 @@ func (h *OrderHandler) DeleteOrder(c *gin.Context) {
 		return
 	}
 
-	// Парсим orderID из URL
 	orderIDStr := c.Param("id")
 	orderID, err := uuid.Parse(orderIDStr)
 	if err != nil {
@@ -203,7 +178,6 @@ func (h *OrderHandler) DeleteOrder(c *gin.Context) {
 		return
 	}
 
-	// Удаляем заказ
 	if err := h.orderService.DeleteOrder(c.Request.Context(), orderID, userUUID); err != nil {
 		if errors.Is(err, service.ErrOrderNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
@@ -222,10 +196,7 @@ func (h *OrderHandler) DeleteOrder(c *gin.Context) {
 	})
 }
 
-// GetUserOrders обрабатывает GET /orders/
-// Получает все заказы текущего пользователя
 func (h *OrderHandler) GetUserOrders(c *gin.Context) {
-	// Получаем userID из контекста
 	userID, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
@@ -238,7 +209,6 @@ func (h *OrderHandler) GetUserOrders(c *gin.Context) {
 		return
 	}
 
-	// Получаем заказы пользователя
 	orders, err := h.orderService.GetUserOrders(c.Request.Context(), userUUID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get orders"})
@@ -251,7 +221,6 @@ func (h *OrderHandler) GetUserOrders(c *gin.Context) {
 	})
 }
 
-// buildOrderResponse формирует ответ с информацией о заказе
 func buildOrderResponse(order *entity.OrderWithItems) entity.OrderResponse {
 	items := make([]entity.ItemResponse, len(order.Items))
 	for i, item := range order.Items {
@@ -276,7 +245,6 @@ func buildOrderResponse(order *entity.OrderWithItems) entity.OrderResponse {
 	}
 }
 
-// formatValidationError форматирует ошибки валидации
 func formatValidationError(err error) string {
 	if validationErrors, ok := err.(validator.ValidationErrors); ok {
 		for _, fieldError := range validationErrors {

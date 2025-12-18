@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"augustberries/auth-service/internal/app/auth/entity"
@@ -51,6 +52,9 @@ func (r *userRepository) GetByID(ctx context.Context, id uuid.UUID) (*entity.Use
 	)
 
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
 		return nil, fmt.Errorf("failed to get user by id: %w", err)
 	}
 
@@ -71,6 +75,9 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*entity.
 	)
 
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
 		return nil, fmt.Errorf("failed to get user by email: %w", err)
 	}
 
@@ -94,7 +101,7 @@ func (r *userRepository) Update(ctx context.Context, user *entity.User) error {
 	}
 
 	if result.RowsAffected() == 0 {
-		return pgx.ErrNoRows
+		return ErrNotFound
 	}
 
 	return nil
@@ -109,7 +116,7 @@ func (r *userRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	}
 
 	if result.RowsAffected() == 0 {
-		return pgx.ErrNoRows
+		return ErrNotFound
 	}
 
 	return nil

@@ -8,54 +8,38 @@ import (
 	"augustberries/catalog-service/internal/app/catalog/service"
 
 	"github.com/gin-gonic/gin"
-	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 )
 
-// CatalogHandler обрабатывает HTTP запросы для каталога с использованием Gin
 type CatalogHandler struct {
-	catalogService *service.CatalogService
-	validator      *validator.Validate
+	catalogService service.CatalogServiceInterface
 }
 
-// NewCatalogHandler создает новый обработчик каталога
-func NewCatalogHandler(catalogService *service.CatalogService) *CatalogHandler {
-	return &CatalogHandler{
-		catalogService: catalogService,
-		validator:      validator.New(),
-	}
+func NewCatalogHandler(catalogService service.CatalogServiceInterface) *CatalogHandler {
+	return &CatalogHandler{catalogService: catalogService}
 }
 
-// === CATEGORIES HANDLERS ===
-
-// CreateCategory обрабатывает POST /categories
 func (h *CatalogHandler) CreateCategory(c *gin.Context) {
 	var req entity.CreateCategoryRequest
-
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
 
-	// Валидация
-	if err := h.validator.Struct(req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": formatValidationError(err)})
-		return
-	}
-
 	category, err := h.catalogService.CreateCategory(c.Request.Context(), &req)
 	if err != nil {
+		if errors.Is(err, service.ErrValidation) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create category"})
 		return
 	}
-
 	c.JSON(http.StatusCreated, category)
 }
 
-// GetCategory обрабатывает GET /categories/:id
 func (h *CatalogHandler) GetCategory(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
+	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid category ID"})
 		return
@@ -70,30 +54,20 @@ func (h *CatalogHandler) GetCategory(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get category"})
 		return
 	}
-
 	c.JSON(http.StatusOK, category)
 }
 
-// GetAllCategories обрабатывает GET /categories (с кешированием)
 func (h *CatalogHandler) GetAllCategories(c *gin.Context) {
 	categories, err := h.catalogService.GetAllCategories(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get categories"})
 		return
 	}
-
-	response := entity.CategoryListResponse{
-		Categories: categories,
-		Total:      len(categories),
-	}
-
-	c.JSON(http.StatusOK, response)
+	c.JSON(http.StatusOK, entity.CategoryListResponse{Categories: categories, Total: len(categories)})
 }
 
-// UpdateCategory обрабатывает PUT /categories/:id
 func (h *CatalogHandler) UpdateCategory(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
+	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid category ID"})
 		return
@@ -105,29 +79,24 @@ func (h *CatalogHandler) UpdateCategory(c *gin.Context) {
 		return
 	}
 
-	// Валидация
-	if err := h.validator.Struct(req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": formatValidationError(err)})
-		return
-	}
-
 	category, err := h.catalogService.UpdateCategory(c.Request.Context(), id, &req)
 	if err != nil {
 		if errors.Is(err, service.ErrCategoryNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Category not found"})
 			return
 		}
+		if errors.Is(err, service.ErrValidation) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update category"})
 		return
 	}
-
 	c.JSON(http.StatusOK, category)
 }
 
-// DeleteCategory обрабатывает DELETE /categories/:id
 func (h *CatalogHandler) DeleteCategory(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
+	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid category ID"})
 		return
@@ -141,26 +110,13 @@ func (h *CatalogHandler) DeleteCategory(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete category"})
 		return
 	}
-
-	c.JSON(http.StatusOK, entity.SuccessResponse{
-		Message: "Category deleted successfully",
-	})
+	c.JSON(http.StatusOK, entity.SuccessResponse{Message: "Category deleted successfully"})
 }
 
-// === PRODUCTS HANDLERS ===
-
-// CreateProduct обрабатывает POST /products
 func (h *CatalogHandler) CreateProduct(c *gin.Context) {
 	var req entity.CreateProductRequest
-
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
-		return
-	}
-
-	// Валидация
-	if err := h.validator.Struct(req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": formatValidationError(err)})
 		return
 	}
 
@@ -170,17 +126,18 @@ func (h *CatalogHandler) CreateProduct(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Category not found"})
 			return
 		}
+		if errors.Is(err, service.ErrValidation) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create product"})
 		return
 	}
-
 	c.JSON(http.StatusCreated, product)
 }
 
-// GetProduct обрабатывает GET /products/:id
 func (h *CatalogHandler) GetProduct(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
+	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID"})
 		return
@@ -195,31 +152,20 @@ func (h *CatalogHandler) GetProduct(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get product"})
 		return
 	}
-
 	c.JSON(http.StatusOK, product)
 }
 
-// GetAllProducts обрабатывает GET /products
 func (h *CatalogHandler) GetAllProducts(c *gin.Context) {
 	products, err := h.catalogService.GetAllProducts(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get products"})
 		return
 	}
-
-	response := entity.ProductListResponse{
-		Products: products,
-		Total:    len(products),
-	}
-
-	c.JSON(http.StatusOK, response)
+	c.JSON(http.StatusOK, entity.ProductListResponse{Products: products, Total: len(products)})
 }
 
-// UpdateProduct обрабатывает PUT /products/:id
-// При изменении цены отправляет событие PRODUCT_UPDATED в Kafka
 func (h *CatalogHandler) UpdateProduct(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
+	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID"})
 		return
@@ -244,14 +190,11 @@ func (h *CatalogHandler) UpdateProduct(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update product"})
 		return
 	}
-
 	c.JSON(http.StatusOK, product)
 }
 
-// DeleteProduct обрабатывает DELETE /products/:id
 func (h *CatalogHandler) DeleteProduct(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
+	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID"})
 		return
@@ -265,18 +208,5 @@ func (h *CatalogHandler) DeleteProduct(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete product"})
 		return
 	}
-
-	c.JSON(http.StatusOK, entity.SuccessResponse{
-		Message: "Product deleted successfully",
-	})
-}
-
-// formatValidationError форматирует ошибки валидации
-func formatValidationError(err error) string {
-	if validationErrors, ok := err.(validator.ValidationErrors); ok {
-		for _, fieldError := range validationErrors {
-			return fieldError.Field() + " is " + fieldError.Tag()
-		}
-	}
-	return "Validation failed"
+	c.JSON(http.StatusOK, entity.SuccessResponse{Message: "Product deleted successfully"})
 }

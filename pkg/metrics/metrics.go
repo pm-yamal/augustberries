@@ -5,7 +5,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-// HTTP Metrics
 
 var HttpRequestsTotal = promauto.NewCounterVec(
 	prometheus.CounterOpts{
@@ -32,7 +31,6 @@ var HttpRequestsInFlight = promauto.NewGaugeVec(
 	[]string{"service"},
 )
 
-// Database Metrics
 
 var DbQueryDuration = promauto.NewHistogramVec(
 	prometheus.HistogramOpts{
@@ -59,7 +57,6 @@ var DbErrors = promauto.NewCounterVec(
 	[]string{"service", "operation"},
 )
 
-// Redis Metrics
 
 var RedisCacheHits = promauto.NewCounterVec(
 	prometheus.CounterOpts{
@@ -94,7 +91,6 @@ var RedisErrors = promauto.NewCounterVec(
 	[]string{"service", "operation"},
 )
 
-// Kafka Metrics
 
 var KafkaMessagesProduced = promauto.NewCounterVec(
 	prometheus.CounterOpts{
@@ -138,7 +134,6 @@ var KafkaErrors = promauto.NewCounterVec(
 	[]string{"service", "topic", "operation"},
 )
 
-// Auth Service Metrics
 
 var AuthRegistrations = promauto.NewCounter(
 	prometheus.CounterOpts{
@@ -163,7 +158,6 @@ var AuthTokensIssued = promauto.NewCounterVec(
 	[]string{"type"},
 )
 
-// Orders Service Metrics
 
 var OrdersCreated = promauto.NewCounter(
 	prometheus.CounterOpts{
@@ -187,7 +181,6 @@ var OrdersByStatus = promauto.NewGaugeVec(
 	[]string{"status"},
 )
 
-// Reviews Service Metrics
 
 var ReviewsCreated = promauto.NewCounter(
 	prometheus.CounterOpts{
@@ -205,7 +198,6 @@ var ReviewsRating = promauto.NewHistogramVec(
 	[]string{},
 )
 
-// Background Worker Metrics
 
 var WorkerOrdersProcessed = promauto.NewCounterVec(
 	prometheus.CounterOpts{

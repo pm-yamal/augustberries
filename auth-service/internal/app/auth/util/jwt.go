@@ -16,7 +16,6 @@ var (
 	ErrExpiredToken = errors.New("token has expired")
 )
 
-// JWTClaims содержит данные, хранящиеся в JWT токене
 type JWTClaims struct {
 	UserID      uuid.UUID `json:"user_id"`
 	Email       string    `json:"email"`
@@ -26,14 +25,12 @@ type JWTClaims struct {
 	jwt.RegisteredClaims
 }
 
-// JWTManager управляет созданием и проверкой JWT токенов
 type JWTManager struct {
 	secretKey            string
 	accessTokenDuration  time.Duration
 	refreshTokenDuration time.Duration
 }
 
-// NewJWTManager создает новый менеджер JWT
 func NewJWTManager(secretKey string, accessDuration, refreshDuration time.Duration) *JWTManager {
 	return &JWTManager{
 		secretKey:            secretKey,
@@ -42,7 +39,6 @@ func NewJWTManager(secretKey string, accessDuration, refreshDuration time.Durati
 	}
 }
 
-// GenerateAccessToken создает access токен с информацией о пользователе
 func (m *JWTManager) GenerateAccessToken(userID uuid.UUID, email string, roleID int, roleName string, permissions []string) (string, error) {
 	now := time.Now()
 	claims := JWTClaims{
@@ -63,9 +59,7 @@ func (m *JWTManager) GenerateAccessToken(userID uuid.UUID, email string, roleID 
 	return token.SignedString([]byte(m.secretKey))
 }
 
-// GenerateRefreshToken создает уникальный refresh токен
 func (m *JWTManager) GenerateRefreshToken() (string, error) {
-	// Генерируем случайные 32 байта
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return "", fmt.Errorf("failed to generate refresh token: %w", err)
@@ -73,13 +67,11 @@ func (m *JWTManager) GenerateRefreshToken() (string, error) {
 	return base64.URLEncoding.EncodeToString(b), nil
 }
 
-// ValidateToken проверяет и парсит JWT токен
 func (m *JWTManager) ValidateToken(tokenString string) (*JWTClaims, error) {
 	token, err := jwt.ParseWithClaims(
 		tokenString,
 		&JWTClaims{},
 		func(token *jwt.Token) (interface{}, error) {
-			// Проверяем метод подписи
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 			}
@@ -102,12 +94,10 @@ func (m *JWTManager) ValidateToken(tokenString string) (*JWTClaims, error) {
 	return claims, nil
 }
 
-// GetAccessTokenDuration возвращает длительность жизни access токена
 func (m *JWTManager) GetAccessTokenDuration() time.Duration {
 	return m.accessTokenDuration
 }
 
-// GetRefreshTokenDuration возвращает длительность жизни refresh токена
 func (m *JWTManager) GetRefreshTokenDuration() time.Duration {
 	return m.refreshTokenDuration
 }

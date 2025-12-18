@@ -11,22 +11,18 @@ import (
 	"augustberries/auth-service/internal/app/auth/util"
 )
 
-// AuthMiddleware проверяет JWT токен в запросах
 type AuthMiddleware struct {
 	authService *service.AuthService
 }
 
-// NewAuthMiddleware создает новый middleware для аутентификации
 func NewAuthMiddleware(authService *service.AuthService) *AuthMiddleware {
 	return &AuthMiddleware{
 		authService: authService,
 	}
 }
 
-// Authenticate проверяет JWT токен и добавляет данные пользователя в контекст
 func (m *AuthMiddleware) Authenticate() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Извлекаем токен из заголовка Authorization
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{
@@ -37,7 +33,6 @@ func (m *AuthMiddleware) Authenticate() gin.HandlerFunc {
 			return
 		}
 
-		// Проверяем формат "Bearer <token>"
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
 			c.JSON(http.StatusUnauthorized, gin.H{
@@ -50,7 +45,6 @@ func (m *AuthMiddleware) Authenticate() gin.HandlerFunc {
 
 		token := parts[1]
 
-		// Валидируем токен
 		claims, err := m.authService.ValidateToken(c.Request.Context(), token)
 		if err != nil {
 			if errors.Is(err, util.ErrExpiredToken) {
@@ -77,7 +71,6 @@ func (m *AuthMiddleware) Authenticate() gin.HandlerFunc {
 			return
 		}
 
-		// Добавляем данные пользователя в контекст Gin
 		c.Set("user_id", claims.UserID)
 		c.Set("email", claims.Email)
 		c.Set("role_id", claims.RoleID)
@@ -88,7 +81,6 @@ func (m *AuthMiddleware) Authenticate() gin.HandlerFunc {
 	}
 }
 
-// RequireRole проверяет, что у пользователя есть требуемая роль
 func (m *AuthMiddleware) RequireRole(roles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		roleName, exists := c.Get("role_name")
@@ -111,7 +103,6 @@ func (m *AuthMiddleware) RequireRole(roles ...string) gin.HandlerFunc {
 			return
 		}
 
-		// Проверяем, есть ли роль пользователя в списке разрешенных
 		hasRole := false
 		for _, role := range roles {
 			if roleStr == role {
@@ -133,7 +124,6 @@ func (m *AuthMiddleware) RequireRole(roles ...string) gin.HandlerFunc {
 	}
 }
 
-// RequirePermission проверяет, что у пользователя есть требуемое разрешение
 func (m *AuthMiddleware) RequirePermission(permission string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		perms, exists := c.Get("permissions")
@@ -156,7 +146,6 @@ func (m *AuthMiddleware) RequirePermission(permission string) gin.HandlerFunc {
 			return
 		}
 
-		// Проверяем, есть ли требуемое разрешение
 		hasPermission := false
 		for _, p := range permissions {
 			if p == permission {

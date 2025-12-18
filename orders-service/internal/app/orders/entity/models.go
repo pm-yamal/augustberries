@@ -6,7 +6,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// Order представляет заказ в системе
 type Order struct {
 	ID            uuid.UUID   `json:"id" gorm:"type:uuid;primaryKey"`
 	UserID        uuid.UUID   `json:"user_id" gorm:"type:uuid;not null"`                       // ID пользователя из Auth Service
@@ -18,12 +17,10 @@ type Order struct {
 	Items         []OrderItem `json:"items,omitempty" gorm:"foreignKey:OrderID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE"`
 }
 
-// TableName указывает имя таблицы для GORM
 func (Order) TableName() string {
 	return "orders"
 }
 
-// OrderStatus представляет статусы заказа
 type OrderStatus string
 
 const (
@@ -34,7 +31,6 @@ const (
 	OrderStatusCancelled OrderStatus = "cancelled" // Отменен
 )
 
-// OrderItem представляет позицию в заказе
 type OrderItem struct {
 	ID        uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
 	OrderID   uuid.UUID `json:"order_id" gorm:"type:uuid;not null"` // Ссылка на заказ
@@ -43,18 +39,15 @@ type OrderItem struct {
 	UnitPrice float64   `json:"unit_price" gorm:"type:decimal(10,2);not null"` // Цена за единицу на момент покупки
 }
 
-// TableName указывает имя таблицы для GORM
 func (OrderItem) TableName() string {
 	return "order_items"
 }
 
-// OrderWithItems содержит заказ с полным списком позиций
 type OrderWithItems struct {
 	Order
 	Items []OrderItem `json:"items"`
 }
 
-// OrderEvent представляет событие изменения заказа для Kafka
 type OrderEvent struct {
 	EventType    string      `json:"event_type"` // ORDER_CREATED, ORDER_UPDATED
 	OrderID      uuid.UUID   `json:"order_id"`
@@ -66,7 +59,6 @@ type OrderEvent struct {
 	Timestamp    time.Time   `json:"timestamp"`
 }
 
-// Product представляет информацию о товаре из Catalog Service
 type Product struct {
 	ID          uuid.UUID `json:"id"`
 	Name        string    `json:"name"`
@@ -74,13 +66,11 @@ type Product struct {
 	CategoryID  uuid.UUID `json:"category_id"`
 }
 
-// ProductWithCategory содержит продукт с информацией о категории
 type ProductWithCategory struct {
 	Product
 	Category Category `json:"category"`
 }
 
-// Category представляет категорию товара
 type Category struct {
 	ID   uuid.UUID `json:"id"`
 	Name string    `json:"name"`

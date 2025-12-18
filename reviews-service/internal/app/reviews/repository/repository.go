@@ -6,7 +6,6 @@ import (
 	"augustberries/reviews-service/internal/app/reviews/entity"
 )
 
-// ReviewRepository определяет методы для работы с отзывами в MongoDB
 type ReviewRepository interface {
 	Create(ctx context.Context, review *entity.Review) error
 	GetByProductID(ctx context.Context, productID string) ([]entity.Review, error)

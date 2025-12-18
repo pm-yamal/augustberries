@@ -6,19 +6,16 @@ import (
 	"github.com/google/uuid"
 )
 
-// Category представляет категорию товаров
 type Category struct {
 	ID        uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
 	Name      string    `json:"name" gorm:"type:varchar(255);unique;not null"`
 	CreatedAt time.Time `json:"created_at" gorm:"autoCreateTime"`
 }
 
-// TableName указывает имя таблицы для GORM
 func (Category) TableName() string {
 	return "categories"
 }
 
-// Product представляет товар в каталоге
 type Product struct {
 	ID          uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
 	Name        string    `json:"name" gorm:"type:varchar(255);not null"`
@@ -29,18 +26,15 @@ type Product struct {
 	CreatedAt   time.Time `json:"created_at" gorm:"autoCreateTime"`
 }
 
-// TableName указывает имя таблицы для GORM
 func (Product) TableName() string {
 	return "products"
 }
 
-// ProductWithCategory содержит продукт с информацией о категории
 type ProductWithCategory struct {
 	Product
 	Category Category `json:"category"`
 }
 
-// ProductEvent представляет событие изменения продукта для Kafka
 type ProductEvent struct {
 	EventType  string    `json:"event_type"` // PRODUCT_CREATED, PRODUCT_UPDATED, PRODUCT_DELETED
 	ProductID  uuid.UUID `json:"product_id"`

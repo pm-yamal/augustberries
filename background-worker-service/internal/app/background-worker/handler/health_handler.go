@@ -13,14 +13,12 @@ import (
 	"gorm.io/gorm"
 )
 
-// HealthCheckHandler управляет healthcheck endpoint'ами
 type HealthCheckHandler struct {
 	db          *gorm.DB
 	redisClient *redis.Client
 	exchangeSvc service.ExchangeRateServiceInterface
 }
 
-// NewHealthCheckHandler создает новый healthcheck handler
 func NewHealthCheckHandler(
 	db *gorm.DB,
 	redisClient *redis.Client,
@@ -33,14 +31,12 @@ func NewHealthCheckHandler(
 	}
 }
 
-// HealthResponse структура ответа healthcheck
 type HealthResponse struct {
 	Status    string            `json:"status"`
 	Checks    map[string]string `json:"checks"`
 	Timestamp time.Time         `json:"timestamp"`
 }
 
-// HealthCheck основной healthcheck endpoint
 func (h *HealthCheckHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
@@ -48,7 +44,6 @@ func (h *HealthCheckHandler) HealthCheck(w http.ResponseWriter, r *http.Request)
 	checks := make(map[string]string)
 	overallStatus := "healthy"
 
-	// Проверяем PostgreSQL
 	if err := h.checkDatabase(ctx); err != nil {
 		checks["database"] = "unhealthy: " + err.Error()
 		overallStatus = "unhealthy"
@@ -56,7 +51,6 @@ func (h *HealthCheckHandler) HealthCheck(w http.ResponseWriter, r *http.Request)
 		checks["database"] = "healthy"
 	}
 
-	// Проверяем Redis
 	if err := h.checkRedis(ctx); err != nil {
 		checks["redis"] = "unhealthy: " + err.Error()
 		overallStatus = "unhealthy"
@@ -64,10 +58,8 @@ func (h *HealthCheckHandler) HealthCheck(w http.ResponseWriter, r *http.Request)
 		checks["redis"] = "healthy"
 	}
 
-	// Проверяем наличие курсов валют в Redis
 	if err := h.checkExchangeRates(ctx); err != nil {
 		checks["exchange_rates"] = "warning: " + err.Error()
-		// Не делаем статус unhealthy, т.к. это warning
 	} else {
 		checks["exchange_rates"] = "healthy"
 	}
@@ -80,7 +72,6 @@ func (h *HealthCheckHandler) HealthCheck(w http.ResponseWriter, r *http.Request)
 
 	w.Header().Set("Content-Type", "application/json")
 
-	// Устанавливаем HTTP статус код
 	if overallStatus != "healthy" {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	} else {
@@ -90,12 +81,10 @@ func (h *HealthCheckHandler) HealthCheck(w http.ResponseWriter, r *http.Request)
 	json.NewEncoder(w).Encode(response)
 }
 
-// Readiness проверяет готовность сервиса к обработке запросов
 func (h *HealthCheckHandler) Readiness(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	// Проверяем что все критические компоненты работают
 	if err := h.checkDatabase(ctx); err != nil {
 		http.Error(w, "database not ready", http.StatusServiceUnavailable)
 		return
@@ -110,13 +99,11 @@ func (h *HealthCheckHandler) Readiness(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("ready"))
 }
 
-// Liveness простая проверка что приложение живо
 func (h *HealthCheckHandler) Liveness(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("alive"))
 }
 
-// checkDatabase проверяет подключение к PostgreSQL
 func (h *HealthCheckHandler) checkDatabase(ctx context.Context) error {
 	sqlDB, err := h.db.DB()
 	if err != nil {
@@ -125,20 +112,16 @@ func (h *HealthCheckHandler) checkDatabase(ctx context.Context) error {
 	return sqlDB.PingContext(ctx)
 }
 
-// checkRedis проверяет подключение к Redis
 func (h *HealthCheckHandler) checkRedis(ctx context.Context) error {
 	return h.redisClient.Ping(ctx).Err()
 }
 
-// checkExchangeRates проверяет наличие актуальных курсов валют
 func (h *HealthCheckHandler) checkExchangeRates(ctx context.Context) error {
-	// Проверяем наличие курса USD как индикатор
 	rate, err := h.exchangeSvc.GetRate(ctx, "USD")
 	if err != nil {
 		return err
 	}
 
-	// Проверяем возраст курса
 	age := time.Since(rate.UpdatedAt)
 	if age > 2*time.Hour {
 		log.Printf("WARNING: Exchange rate for USD is outdated (age: %v)", age)
@@ -147,7 +130,6 @@ func (h *HealthCheckHandler) checkExchangeRates(ctx context.Context) error {
 	return nil
 }
 
-// RegisterRoutes регистрирует healthcheck маршруты
 func (h *HealthCheckHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", h.HealthCheck)
 	mux.HandleFunc("/health/readiness", h.Readiness)

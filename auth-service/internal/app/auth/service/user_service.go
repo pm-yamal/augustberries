@@ -12,13 +12,11 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// UserService обрабатывает бизнес-логику работы с пользователями
 type UserService struct {
 	userRepo repository.UserRepository
 	roleRepo repository.RoleRepository
 }
 
-// NewUserService создает новый сервис пользователей
 func NewUserService(
 	userRepo repository.UserRepository,
 	roleRepo repository.RoleRepository,
@@ -29,7 +27,6 @@ func NewUserService(
 	}
 }
 
-// GetByID получает пользователя по ID
 func (s *UserService) GetByID(ctx context.Context, id uuid.UUID) (*entity.UserWithRole, error) {
 	user, err := s.userRepo.GetByID(ctx, id)
 	if err != nil {
@@ -59,7 +56,6 @@ func (s *UserService) GetByID(ctx context.Context, id uuid.UUID) (*entity.UserWi
 	}, nil
 }
 
-// GetByEmail получает пользователя по email
 func (s *UserService) GetByEmail(ctx context.Context, email string) (*entity.UserWithRole, error) {
 	user, err := s.userRepo.GetByEmail(ctx, email)
 	if err != nil {
@@ -89,9 +85,7 @@ func (s *UserService) GetByEmail(ctx context.Context, email string) (*entity.Use
 	}, nil
 }
 
-// Update обновляет данные пользователя
 func (s *UserService) Update(ctx context.Context, id uuid.UUID, req *entity.UpdateUserRequest) (*entity.User, error) {
-	// Проверяем существование пользователя
 	user, err := s.userRepo.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -100,7 +94,6 @@ func (s *UserService) Update(ctx context.Context, id uuid.UUID, req *entity.Upda
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 
-	// Обновляем поля
 	if req.Name != "" {
 		user.Name = req.Name
 	}
@@ -108,7 +101,6 @@ func (s *UserService) Update(ctx context.Context, id uuid.UUID, req *entity.Upda
 		user.Email = req.Email
 	}
 	if req.RoleID != 0 {
-		// Проверяем существование роли
 		_, err := s.roleRepo.GetByID(ctx, req.RoleID)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -119,7 +111,6 @@ func (s *UserService) Update(ctx context.Context, id uuid.UUID, req *entity.Upda
 		user.RoleID = req.RoleID
 	}
 
-	// Сохраняем изменения
 	if err := s.userRepo.Update(ctx, user); err != nil {
 		return nil, fmt.Errorf("failed to update user: %w", err)
 	}
@@ -127,9 +118,7 @@ func (s *UserService) Update(ctx context.Context, id uuid.UUID, req *entity.Upda
 	return user, nil
 }
 
-// UpdatePassword обновляет пароль пользователя
 func (s *UserService) UpdatePassword(ctx context.Context, id uuid.UUID, oldPassword, newPassword string) error {
-	// Получаем пользователя
 	user, err := s.userRepo.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -138,18 +127,15 @@ func (s *UserService) UpdatePassword(ctx context.Context, id uuid.UUID, oldPassw
 		return fmt.Errorf("failed to get user: %w", err)
 	}
 
-	// Проверяем старый пароль
 	if !util.CheckPassword(oldPassword, user.PasswordHash) {
 		return ErrInvalidCredentials
 	}
 
-	// Хэшируем новый пароль
 	newPasswordHash, err := util.HashPassword(newPassword)
 	if err != nil {
 		return fmt.Errorf("failed to hash password: %w", err)
 	}
 
-	// Обновляем пароль
 	user.PasswordHash = newPasswordHash
 	if err := s.userRepo.Update(ctx, user); err != nil {
 		return fmt.Errorf("failed to update user password: %w", err)
@@ -158,7 +144,6 @@ func (s *UserService) UpdatePassword(ctx context.Context, id uuid.UUID, oldPassw
 	return nil
 }
 
-// Delete удаляет пользователя
 func (s *UserService) Delete(ctx context.Context, id uuid.UUID) error {
 	if err := s.userRepo.Delete(ctx, id); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -170,7 +155,6 @@ func (s *UserService) Delete(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-// List получает список всех пользователей (добавим метод в репозиторий)
 func (s *UserService) List(ctx context.Context) ([]entity.UserWithRole, error) {
 	users, err := s.userRepo.List(ctx)
 	if err != nil {

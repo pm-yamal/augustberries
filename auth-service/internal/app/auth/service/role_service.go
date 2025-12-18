@@ -11,19 +11,16 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// RoleService обрабатывает бизнес-логику работы с ролями
 type RoleService struct {
 	roleRepo repository.RoleRepository
 }
 
-// NewRoleService создает новый сервис ролей
 func NewRoleService(roleRepo repository.RoleRepository) *RoleService {
 	return &RoleService{
 		roleRepo: roleRepo,
 	}
 }
 
-// GetByID получает роль по ID
 func (s *RoleService) GetByID(ctx context.Context, id int) (*entity.Role, error) {
 	role, err := s.roleRepo.GetByID(ctx, id)
 	if err != nil {
@@ -36,7 +33,6 @@ func (s *RoleService) GetByID(ctx context.Context, id int) (*entity.Role, error)
 	return role, nil
 }
 
-// GetByName получает роль по имени
 func (s *RoleService) GetByName(ctx context.Context, name string) (*entity.Role, error) {
 	role, err := s.roleRepo.GetByName(ctx, name)
 	if err != nil {
@@ -49,7 +45,6 @@ func (s *RoleService) GetByName(ctx context.Context, name string) (*entity.Role,
 	return role, nil
 }
 
-// List получает список всех ролей
 func (s *RoleService) List(ctx context.Context) ([]entity.Role, error) {
 	roles, err := s.roleRepo.List(ctx)
 	if err != nil {
@@ -59,7 +54,6 @@ func (s *RoleService) List(ctx context.Context) ([]entity.Role, error) {
 	return roles, nil
 }
 
-// Create создает новую роль
 func (s *RoleService) Create(ctx context.Context, req *entity.CreateRoleRequest) (*entity.Role, error) {
 	role := &entity.Role{
 		Name:        req.Name,
@@ -73,9 +67,7 @@ func (s *RoleService) Create(ctx context.Context, req *entity.CreateRoleRequest)
 	return role, nil
 }
 
-// Update обновляет роль
 func (s *RoleService) Update(ctx context.Context, id int, req *entity.UpdateRoleRequest) (*entity.Role, error) {
-	// Проверяем существование роли
 	role, err := s.roleRepo.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -84,7 +76,6 @@ func (s *RoleService) Update(ctx context.Context, id int, req *entity.UpdateRole
 		return nil, fmt.Errorf("failed to get role: %w", err)
 	}
 
-	// Обновляем поля
 	if req.Name != "" {
 		role.Name = req.Name
 	}
@@ -99,7 +90,6 @@ func (s *RoleService) Update(ctx context.Context, id int, req *entity.UpdateRole
 	return role, nil
 }
 
-// Delete удаляет роль
 func (s *RoleService) Delete(ctx context.Context, id int) error {
 	if err := s.roleRepo.Delete(ctx, id); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -111,7 +101,6 @@ func (s *RoleService) Delete(ctx context.Context, id int) error {
 	return nil
 }
 
-// GetPermissions получает разрешения роли
 func (s *RoleService) GetPermissions(ctx context.Context, roleID int) ([]entity.Permission, error) {
 	permissions, err := s.roleRepo.GetPermissionsByRoleID(ctx, roleID)
 	if err != nil {
@@ -121,9 +110,7 @@ func (s *RoleService) GetPermissions(ctx context.Context, roleID int) ([]entity.
 	return permissions, nil
 }
 
-// AssignPermissions назначает разрешения роли
 func (s *RoleService) AssignPermissions(ctx context.Context, roleID int, permissionIDs []int) error {
-	// Проверяем существование роли
 	_, err := s.roleRepo.GetByID(ctx, roleID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -139,9 +126,7 @@ func (s *RoleService) AssignPermissions(ctx context.Context, roleID int, permiss
 	return nil
 }
 
-// RemovePermissions удаляет разрешения у роли
 func (s *RoleService) RemovePermissions(ctx context.Context, roleID int, permissionIDs []int) error {
-	// Проверяем существование роли
 	_, err := s.roleRepo.GetByID(ctx, roleID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -157,19 +142,16 @@ func (s *RoleService) RemovePermissions(ctx context.Context, roleID int, permiss
 	return nil
 }
 
-// PermissionService обрабатывает бизнес-логику работы с разрешениями
 type PermissionService struct {
 	roleRepo repository.RoleRepository
 }
 
-// NewPermissionService создает новый сервис разрешений
 func NewPermissionService(roleRepo repository.RoleRepository) *PermissionService {
 	return &PermissionService{
 		roleRepo: roleRepo,
 	}
 }
 
-// List получает список всех разрешений
 func (s *PermissionService) List(ctx context.Context) ([]entity.Permission, error) {
 	permissions, err := s.roleRepo.ListPermissions(ctx)
 	if err != nil {
@@ -179,7 +161,6 @@ func (s *PermissionService) List(ctx context.Context) ([]entity.Permission, erro
 	return permissions, nil
 }
 
-// Create создает новое разрешение
 func (s *PermissionService) Create(ctx context.Context, req *entity.CreatePermissionRequest) (*entity.Permission, error) {
 	permission := &entity.Permission{
 		Code:        req.Code,
@@ -193,7 +174,6 @@ func (s *PermissionService) Create(ctx context.Context, req *entity.CreatePermis
 	return permission, nil
 }
 
-// Delete удаляет разрешение
 func (s *PermissionService) Delete(ctx context.Context, id int) error {
 	if err := s.roleRepo.DeletePermission(ctx, id); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

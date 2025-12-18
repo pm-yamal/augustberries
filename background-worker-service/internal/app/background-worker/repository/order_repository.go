@@ -11,21 +11,17 @@ import (
 	"gorm.io/gorm"
 )
 
-// orderRepository реализует OrderRepository для работы с PostgreSQL через GORM
 type orderRepository struct {
 	db *gorm.DB
 }
 
-// NewOrderRepository создает новый репозиторий заказов
 func NewOrderRepository(db *gorm.DB) OrderRepository {
 	return &orderRepository{db: db}
 }
 
-// GetByID получает заказ по ID
 func (r *orderRepository) GetByID(ctx context.Context, orderID uuid.UUID) (*entity.Order, error) {
 	var order entity.Order
 
-	// Выполняем запрос к БД с учетом контекста
 	result := r.db.WithContext(ctx).Where("id = ?", orderID).First(&order)
 
 	if result.Error != nil {
@@ -38,9 +34,7 @@ func (r *orderRepository) GetByID(ctx context.Context, orderID uuid.UUID) (*enti
 	return &order, nil
 }
 
-// Update обновляет заказ
 func (r *orderRepository) Update(ctx context.Context, order *entity.Order) error {
-	// Обновляем все поля заказа
 	result := r.db.WithContext(ctx).Save(order)
 
 	if result.Error != nil {
@@ -54,10 +48,7 @@ func (r *orderRepository) Update(ctx context.Context, order *entity.Order) error
 	return nil
 }
 
-// UpdateDeliveryAndTotal обновляет цену доставки и общую сумму заказа
-// Используется после расчета стоимости доставки с учетом курсов валют
 func (r *orderRepository) UpdateDeliveryAndTotal(ctx context.Context, orderID uuid.UUID, deliveryPrice, totalPrice float64) error {
-	// Выполняем точечное обновление двух полей
 	result := r.db.WithContext(ctx).
 		Model(&entity.Order{}).
 		Where("id = ?", orderID).
@@ -77,10 +68,7 @@ func (r *orderRepository) UpdateDeliveryAndTotal(ctx context.Context, orderID uu
 	return nil
 }
 
-// UpdateOrderWithCurrency обновляет цену доставки, общую сумму и валюту заказа
-// Используется после расчета стоимости доставки с конвертацией в RUB
 func (r *orderRepository) UpdateOrderWithCurrency(ctx context.Context, orderID uuid.UUID, deliveryPrice, totalPrice float64, currency string) error {
-	// Выполняем точечное обновление трех полей
 	result := r.db.WithContext(ctx).
 		Model(&entity.Order{}).
 		Where("id = ?", orderID).

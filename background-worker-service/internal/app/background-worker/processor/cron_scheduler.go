@@ -9,15 +9,12 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-// CronScheduler управляет периодическими задачами
 type CronScheduler struct {
 	cron        *cron.Cron
 	exchangeSvc service.ExchangeRateServiceInterface
 }
 
-// NewCronScheduler создает новый планировщик задач
 func NewCronScheduler(exchangeSvc service.ExchangeRateServiceInterface) *CronScheduler {
-	// Создаем cron с логированием
 	c := cron.New(cron.WithLogger(cron.VerbosePrintfLogger(log.Default())))
 
 	return &CronScheduler{
@@ -26,11 +23,9 @@ func NewCronScheduler(exchangeSvc service.ExchangeRateServiceInterface) *CronSch
 	}
 }
 
-// Start запускает планировщик задач
 func (s *CronScheduler) Start(ctx context.Context, schedule string) error {
 	log.Printf("Starting cron scheduler with schedule: %s", schedule)
 
-	// Добавляем задачу обновления курсов валют
 	_, err := s.cron.AddFunc(schedule, func() {
 		log.Println("Cron job triggered: updating exchange rates")
 
@@ -45,11 +40,9 @@ func (s *CronScheduler) Start(ctx context.Context, schedule string) error {
 		return err
 	}
 
-	// Запускаем планировщик
 	s.cron.Start()
 	log.Println("Cron scheduler started")
 
-	// Выполняем первое обновление курсов сразу при старте
 	log.Println("Performing initial exchange rates update...")
 	if err := s.exchangeSvc.FetchAndStoreRates(ctx); err != nil {
 		log.Printf("WARNING: Failed initial exchange rates update: %v", err)
@@ -60,7 +53,6 @@ func (s *CronScheduler) Start(ctx context.Context, schedule string) error {
 	return nil
 }
 
-// Stop останавливает планировщик задач
 func (s *CronScheduler) Stop() {
 	log.Println("Stopping cron scheduler...")
 	ctx := s.cron.Stop()
@@ -68,7 +60,6 @@ func (s *CronScheduler) Stop() {
 	log.Println("Cron scheduler stopped")
 }
 
-// GetEntries возвращает список запланированных задач
 func (s *CronScheduler) GetEntries() []cron.Entry {
 	return s.cron.Entries()
 }

@@ -15,12 +15,10 @@ type roleRepository struct {
 	db *pgxpool.Pool
 }
 
-// NewRoleRepository создает новый репозиторий ролей
 func NewRoleRepository(db *pgxpool.Pool) RoleRepository {
 	return &roleRepository{db: db}
 }
 
-// GetByID получает роль по ID
 func (r *roleRepository) GetByID(ctx context.Context, id int) (*entity.Role, error) {
 	query := `SELECT id, name, description FROM roles WHERE id = $1`
 
@@ -37,7 +35,6 @@ func (r *roleRepository) GetByID(ctx context.Context, id int) (*entity.Role, err
 	return &role, nil
 }
 
-// GetByName получает роль по имени
 func (r *roleRepository) GetByName(ctx context.Context, name string) (*entity.Role, error) {
 	query := `SELECT id, name, description FROM roles WHERE name = $1`
 
